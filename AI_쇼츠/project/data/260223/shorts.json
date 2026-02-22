@@ -1,0 +1,189 @@
+{
+  "title": "시니어 건강 쌈채소: 숨겨진 가려움의 원인과 해결책",
+  "target_audience": "고령층 및 건강에 관심 있는 성인",
+  "tone": "정보 전달, 친근, 신뢰감, 경고, 해결책 제시",
+  "safety_notes": "쌈채소 내 기생충 알 감염 위험 경고, 올바른 채소 세척 및 돼지고기 조리법 강조",
+  "cta": "작은 습관으로 더 안전하고 건강하게 즐기시길 바랍니다. 늘 건강하십시오.",
+  "estimated_total_duration_sec": 55,
+  "scenes": [
+    {
+      "scene_id": 1,
+      "purpose": "후킹",
+      "duration_sec": 5,
+      "start_time": 0,
+      "end_time": 5,
+      "tts_text": "몸에 좋다고 매일 드시는 그 유기농 쌈채소가, 밤새도록 온몸을 가렵게 만드는 원인일 수 있다는 사실, 알고 계셨습니까?",
+      "subtitle_lines": [
+        "몸에 좋다는 유기농 쌈채소",
+        "밤새 가려움의 원인일 수 있습니다"
+      ],
+      "keywords": [
+        "가려움"
+      ],
+      "visual_type": [
+        "실사형"
+      ],
+      "image_prompt_ko": "신선하고 먹음직스러운 유기농 상추 잎 위로 물방울이 맺혀있는 매크로 클로즈업 샷. 이어서, 파자마를 입은 노인의 등이 보이며, 침실의 은은한 조명 아래서 팔을 긁고 있는 불안한 모습. 얼굴은 보이지 않음. 전체적으로 따뜻한 베이지와 화이트 톤.",
+      "image_prompt_en": "A two-part sequence. **Shot 1:** Extreme close-up, macro shot of fresh, dewy organic lettuce leaves. The leaves are vibrant green and covered in tiny water droplets, looking very appetizing. Soft, natural lighting. **Shot 2:** A medium shot from behind an elderly person in simple pajamas, sitting on the edge of a bed in a dimly lit, cozy bedroom. They are restlessly scratching their forearm. Their face is not visible. The overall color palette is warm with beige, white, and soft wood tones. Leave the top 1/3 of the frame empty for a title overlay. No text, no letters, no typography, no Korean characters rendered in the image.",
+      "negative_prompt": "text, letters, typography, caption, subtitle, Korean characters, Hangul, watermark, logo, scary, horror, gore, bright neon colors, messy room, visible face.",
+      "aspect_ratio": "9:16",
+      "camera_motion": "Zoom-out (2s, 약)",
+      "transition_to_next": "Cut",
+      "overlay_text": "Title overlay",
+      "overlay_position": "하단",
+      "sfx_optional": null,
+      "bgm_mood_optional": null
+    },
+    {
+      "scene_id": 2,
+      "purpose": "공감/권위",
+      "duration_sec": 12,
+      "start_time": 5,
+      "end_time": 17,
+      "tts_text": "독일에서 40년 간 영양학을 연구한 저에게 얼마 전, 72세 어머님 한 분이 오셨습니다. 밤마다 항문이 너무 가려워 잠을 설친다 하셨죠. 평생 건강을 위해 유기농 쌈만 고집하셨다는데, 원인은 바로 그 안에 숨어있던 아주 작은 ‘알’이었습니다.",
+      "subtitle_lines": [
+        "독일 40년 영양 전문가가 알려드립니다",
+        "72세 어머님의 가려움증",
+        "원인은 유기농 쌈 속 '작은 알'"
+      ],
+      "keywords": [
+        "'작은 알'"
+      ],
+      "visual_type": [
+        "실사형",
+        "인포그래픽형"
+      ],
+      "image_prompt_ko": "밝고 깨끗한 서재를 배경으로, 흰 가운이나 단정한 셔츠를 입은 인자하면서도 신뢰감 있는 동양인 남성 전문가(60대)가 카메라를 부드럽게 응시하는 미디엄 샷. 이어서, 상추 잎 표면의 아주 작은 점을 향해 돋보기 아이콘이 다가가는 그래픽 장면.",
+      "image_prompt_en": "A medium shot of a kind yet authoritative senior East Asian male doctor or researcher (60s) in a bright, clean office with bookshelves in the background. He is wearing a clean dress shirt and has a gentle, reassuring expression, looking directly at the camera. This is followed by a graphic shot: a macro view of a lettuce leaf, with a stylized magnifying glass icon moving to focus on a tiny, barely visible dark speck on the leaf's surface. The background is simple and clean. Leave empty space on the right side for text overlays and bullet points. No text, no letters, no typography, no Korean characters rendered in the image.",
+      "negative_prompt": "text, letters, typography, caption, subtitle, Korean characters, Hangul, watermark, logo, intimidating expression, dark room, cluttered, messy, young person.",
+      "aspect_ratio": "9:16",
+      "camera_motion": "Zoom-in (3s, 약)",
+      "transition_to_next": "Cut",
+      "overlay_text": "Text overlays & bullet points",
+      "overlay_position": "하단",
+      "sfx_optional": null,
+      "bgm_mood_optional": null
+    },
+    {
+      "scene_id": 3,
+      "purpose": "오해 바로잡기",
+      "duration_sec": 11,
+      "start_time": 17,
+      "end_time": 28,
+      "tts_text": "기생충 알은 마치 융단 깊숙이 박힌 깨알과 같아서, 흐르는 물에 아무리 씻어도 소용이 없습니다. \"냉동실에 넣으면 되겠지\", \"식초에 담그면 되겠지\" 하는 생각은 아주 위험한 오해입니다. 가정용 냉동고 온도나 식초로는 어림도 없죠.",
+      "subtitle_lines": [
+        "기생충 알은 융단에 박힌 깨알과 같습니다",
+        "물 세척? 소용없습니다",
+        "냉동? 식초? 위험한 오해입니다"
+      ],
+      "keywords": [
+        "위험한 오해"
+      ],
+      "visual_type": [
+        "인포그래픽형"
+      ],
+      "image_prompt_ko": "깨끗한 베이지색 배경에 흐르는 물, 냉동고, 식초병을 상징하는 단순하고 세련된 아이콘들이 나란히 배치되어 있음. 각 아이콘 위로 반투명한 붉은색 X 표시가 차례로 나타나는 인포그래픽. 화면 하단에 '위험한 오해' 같은 자막을 넣을 공간 확보.",
+      "image_prompt_en": "A clean, minimalist infographic scene. On a soft beige background, three simple, modern icons are arranged horizontally: a flowing water tap, a freezer with snowflakes, and a vinegar bottle. A large, semi-transparent red 'X' symbol is overlaid on each icon. The animation implies the 'X' appears sequentially. The design is flat and easy to understand. Leave the bottom 1/3 of the frame empty for a large text banner. No text, no letters, no typography, no Korean characters rendered in the image.",
+      "negative_prompt": "text, letters, typography, caption, subtitle, Korean characters, Hangul, watermark, logo, 3D render, photorealistic, cluttered, complex background, dark colors.",
+      "aspect_ratio": "9:16",
+      "camera_motion": "Hold (11s, -)",
+      "transition_to_next": "Cut",
+      "overlay_text": "Large text banner",
+      "overlay_position": "하단",
+      "sfx_optional": null,
+      "bgm_mood_optional": null
+    },
+    {
+      "scene_id": 4,
+      "purpose": "해결책 (숫자 강조)",
+      "duration_sec": 12,
+      "start_time": 28,
+      "end_time": 40,
+      "tts_text": "그럼 어떡해야 할까요? 해결책은 놀랍도록 간단합니다. 딱 '30초'만 기억하십시오. 드시기 전, 섭씨 50도 이상 되는 따뜻한 물에 30초만 살짝 담갔다 빼주세요. 채소 데치기, 이 간단한 습관 하나가 우리 몸을 지키는 가장 확실한 방패가 되어줍니다.",
+      "subtitle_lines": [
+        "가장 확실한 해결책",
+        "딱 '30초'만 기억하세요",
+        "50도 이상 따뜻한 물에",
+        "30초만 살짝 데치기"
+      ],
+      "keywords": [
+        "30초",
+        "50도"
+      ],
+      "visual_type": [
+        "실사형"
+      ],
+      "image_prompt_ko": "깨끗한 스테인리스 냄비 속의 물에 담긴 요리용 온도계가 '50'이라는 숫자를 명확하게 보여주는 클로즈업. 이어서 따뜻한 김이 올라오는 물에 쌈채소를 부드럽게 담그는 손. 마지막으로 화면 중앙에 '30초' 타이머 그래픽이 들어갈 수 있도록 배경을 단순화한 주방 장면.",
+      "image_prompt_en": "A sequence of shots in a bright, clean kitchen. **Shot 1:** Close-up on a digital cooking thermometer submerged in a stainless steel pot of water, clearly displaying the number '50'. Gentle steam rises from the water. **Shot 2:** A pair of hands gently lowers fresh lettuce into the warm, steaming water. **Shot 3:** A simple, clean shot of the pot on the stove, composed with a large empty space in the center, suitable for overlaying a '30-second' timer graphic in post-production. No text, no letters, no typography, no Korean characters rendered in the image.",
+      "negative_prompt": "text, letters, typography, caption, subtitle, Korean characters, Hangul, watermark, logo, boiling water, dirty kitchen, dark lighting, plastic bowl.",
+      "aspect_ratio": "9:16",
+      "camera_motion": "Pan-right (4s, 중) -> Zoom-in (3s, 중)",
+      "transition_to_next": "Cut",
+      "overlay_text": "'30-second' timer graphic",
+      "overlay_position": "하단 / 중앙",
+      "sfx_optional": null,
+      "bgm_mood_optional": null
+    },
+    {
+      "scene_id": 5,
+      "purpose": "경고/추가 정보",
+      "duration_sec": 7,
+      "start_time": 40,
+      "end_time": 47,
+      "tts_text": "돼지고기는 속까지 완전히 익히시는 것, 절대 잊지 마시고요.",
+      "subtitle_lines": [
+        "이 간단한 습관 하나가",
+        "내 몸을 지키는 방패입니다",
+        "돼지고기는 속까지 완전히!",
+        "잊지 마세요"
+      ],
+      "keywords": [
+        "방패",
+        "완전히"
+      ],
+      "visual_type": [
+        "인포그래픽형",
+        "실사형"
+      ],
+      "image_prompt_ko": "나무 도마 위에 놓인, 살짝 데쳐져서 색이 선명해진 쌈채소. 그 위로 반짝이는 방패 모양 아이콘이 그래픽으로 나타남. 이어서, 잘 익은 황금빛 삼겹살을 젓가락으로 잘랐을 때, 속까지 완벽하게 하얗게 익은 단면을 보여주는 클로즈업 샷.",
+      "image_prompt_en": "**Shot 1:** A top-down shot of vibrant green, blanched lettuce neatly arranged on a clean wooden cutting board. A glowing, semi-transparent shield icon is graphically overlaid on the lettuce, symbolizing protection. **Shot 2:** An extreme close-up shot of a perfectly grilled, golden-brown slice of pork belly. A pair of chopsticks cuts it in half, revealing a completely white, opaque, and fully cooked interior. No pinkness is visible. The background is a simple plate or grill. Leave empty space on the left side for a text overlay. No text, no letters, no typography, no Korean characters rendered in the image.",
+      "negative_prompt": "text, letters, typography, caption, subtitle, Korean characters, Hangul, watermark, logo, raw meat, undercooked pork, blood, burnt food, messy plate.",
+      "aspect_ratio": "9:16",
+      "camera_motion": "Hold (3s, 약) -> Zoom-in (4s, 약)",
+      "transition_to_next": "Cut",
+      "overlay_text": "Text overlay",
+      "overlay_position": "하단",
+      "sfx_optional": null,
+      "bgm_mood_optional": null
+    },
+    {
+      "scene_id": 6,
+      "purpose": "마무리/CTA",
+      "duration_sec": 8,
+      "start_time": 47,
+      "end_time": 55,
+      "tts_text": "우리 어르신들, 건강 지키려고 드시는 귀한 음식이지요. 이 작은 습관 하나만 더해서, 더 안전하고 건강하게 즐기시길 바랍니다. 늘 건강하십시오.",
+      "subtitle_lines": [
+        "작은 습관으로",
+        "더 안전하고 건강하게",
+        "늘 건강하십시오"
+      ],
+      "keywords": [
+        "늘 건강하십시오"
+      ],
+      "visual_type": [
+        "실사형"
+      ],
+      "image_prompt_ko": "햇살이 잘 드는 거실이나 식탁에서, 건강하고 행복한 표정의 노부부가 서로를 마주보며 맛있게 쌈밥을 먹는 모습. 웃음과 따뜻함이 가득한 분위기. 화면 하단에 '늘 건강하십시오'라는 자막이 들어갈 넓은 여백을 둠.",
+      "image_prompt_en": "A warm, inviting medium shot of a happy and healthy senior couple sitting at a dining table bathed in soft, natural sunlight. They are joyfully eating ssam (lettuce wraps), smiling at each other. The atmosphere is loving and content. The setting is a cozy, bright home. Leave the entire bottom 1/3 of the frame clean and empty for a concluding text message overlay. No text, no letters, no typography, no Korean characters rendered in the image.",
+      "negative_prompt": "text, letters, typography, caption, subtitle, Korean characters, Hangul, watermark, logo, sad, lonely, dark room, unhealthy food, arguing.",
+      "aspect_ratio": "9:16",
+      "camera_motion": "Zoom-out (5s, 약)",
+      "transition_to_next": "Fade",
+      "overlay_text": "Concluding text message",
+      "overlay_position": "중앙",
+      "sfx_optional": null,
+      "bgm_mood_optional": null
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+file 'D:/AI_쇼츠/project/temp/260223/clips_shorts/1.mp4'
+file 'D:/AI_쇼츠/project/temp/260223/clips_shorts/2.mp4'
+file 'D:/AI_쇼츠/project/temp/260223/clips_shorts/3.mp4'
+file 'D:/AI_쇼츠/project/temp/260223/clips_shorts/4.mp4'
+file 'D:/AI_쇼츠/project/temp/260223/clips_shorts/5.mp4'
+file 'D:/AI_쇼츠/project/temp/260223/clips_shorts/6.mp4'
