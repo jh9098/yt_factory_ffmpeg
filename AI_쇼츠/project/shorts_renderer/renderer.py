@@ -223,19 +223,20 @@ def render_timeline_to_video(
         key=lambda x: (safe_int(x.get("layer", 1), 1), safe_float(x.get("start_sec", 0)))
     )
 
-    inputs = [str(master_audio)]
     unique_image_paths: List[Path] = []
     path_to_input_idx: Dict[str, int] = {}
 
+    # 0번 입력은 master_audio 이므로 이미지 입력은 1부터 시작
+    next_input_idx = 1
     for item in sorted_images:
         p = Path(item["path"])
         if not p.exists():
             raise FileNotFoundError(f"이미지 없음: {p}")
         sp = str(p)
         if sp not in path_to_input_idx:
-            path_to_input_idx[sp] = len(inputs)
-            inputs.append(sp)
+            path_to_input_idx[sp] = next_input_idx
             unique_image_paths.append(p)
+            next_input_idx += 1
 
     # -----------------------------
     # drawtext 자산(폰트/텍스트) 임시 저장 폴더
@@ -256,6 +257,9 @@ def render_timeline_to_video(
 
     # -------------------------------------------------
     # 이미지 레이어 구성
+    # 핵심 수정:
+    #   fade는 "상대시간(0~dur)" 기준으로 먼저 적용하고
+    #   setpts로 "절대 시작시간(start)" 이동은 그 다음에 한다.
     # -------------------------------------------------
     for i, item in enumerate(sorted_images, start=1):
         path = str(item["path"])
@@ -277,6 +281,7 @@ def render_timeline_to_video(
         src_label = f"imgsrc{i}"
         mov_label = f"imgmv{i}"
         fade_label = f"imgfd{i}"
+        timed_label = f"imgtm{i}"
         out_label = f"v{i}"
 
         if scale_mode == "contain":
@@ -308,11 +313,13 @@ def render_timeline_to_video(
             intensity=motion_strength
         )
 
+        # 1) 장면 내부 상대시간(0~dur) 기준 영상 생성
         filter_parts.append(
-            f"[{src_label}]{zp},trim=duration={dur},setpts=PTS-STARTPTS+{start}/TB,format=rgba"
+            f"[{src_label}]{zp},trim=duration={dur},setpts=PTS-STARTPTS,format=rgba"
             f"[{mov_label}]"
         )
 
+        # 2) fade는 상대시간 기준으로 적용
         fade_chain = f"[{mov_label}]"
         if fade_in > 0:
             fade_chain += f"fade=t=in:st=0:d={fade_in}:alpha=1,"
@@ -321,10 +328,15 @@ def render_timeline_to_video(
         fade_chain += f"format=rgba[{fade_label}]"
         filter_parts.append(fade_chain)
 
+        # 3) fade 적용이 끝난 뒤, 그제서야 타임라인 절대 시간(start)으로 이동
+        filter_parts.append(
+            f"[{fade_label}]setpts=PTS+{start}/TB[{timed_label}]"
+        )
+
         overlay_enable = f"between(t,{start:.3f},{end:.3f})"
         overlay = (
-            f"[{prev_label}][{fade_label}]"
-            f"overlay=x={x}:y={y}:format=auto:shortest=0:repeatlast=0:enable='{overlay_enable}'"
+            f"[{prev_label}][{timed_label}]"
+            f"overlay=x={x}:y={y}:format=auto:shortest=0:eof_action=pass:repeatlast=0:enable='{overlay_enable}'"
             f"[{out_label}]"
         )
         filter_parts.append(overlay)
@@ -335,7 +347,6 @@ def render_timeline_to_video(
 
     # -------------------------------------------------
     # 자막 / 오버레이 drawtext
-    # text= 대신 textfile= 사용
     # -------------------------------------------------
     sorted_subs = sorted(
         subtitle_items,
@@ -381,7 +392,6 @@ def render_timeline_to_video(
             x_expr = f"(w-text_w)/2+{x_offset}"
             y_expr = f"h*0.82+{y_offset}"
 
-        # 자막을 파일로 저장
         txt_file = temp_text_dir / f"subtitle_{j:03d}.txt"
         txt_file.write_text(text, encoding="utf-8")
         txt_file_escaped = ffmpeg_escape_path_for_filter(txt_file)
@@ -432,8 +442,6 @@ def render_timeline_to_video(
     run_cmd(cmd, check=True, logger=logger)
     logger(f"[OK] 렌더 완료: {output_path}")
     return output_path
-
-
 def render_timeline_service(
     timeline_path: Path,
     output_path: Path,
