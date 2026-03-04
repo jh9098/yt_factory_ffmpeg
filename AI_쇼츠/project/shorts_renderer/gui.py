@@ -19,6 +19,7 @@ except ImportError:
     raise SystemExit("Pillow가 필요합니다. 설치: pip install pillow")
 
 from .constants import (
+    DEFAULT_BG_COLOR,
     DEFAULT_FADE_SEC,
     DEFAULT_FONT_SIZE,
     DEFAULT_FPS,
@@ -28,8 +29,8 @@ from .constants import (
     DEFAULT_PREVIEW_W,
     DEFAULT_WIDTH,
 )
-from .renderer import parse_hex_color, position_to_xy, render_timeline_to_video
-from .timeline_builder import build_master_audio_and_timeline
+from .renderer import render_timeline_service
+from .timeline_builder import build_timeline_service
 from .utils import ensure_dir, safe_float, safe_int
 
 class TkTextLogger:
@@ -384,6 +385,55 @@ class TimelineEditorGUI:
         ttk.Button(parent, text="메타 반영", command=self._apply_meta_form).grid(row=4, column=1, sticky="w", pady=10)
         parent.columnconfigure(1, weight=1)
 
+    def _format_gui_error(self, message: str) -> str:
+        return f"[GUI][ERROR] {message}"
+
+    def _show_gui_error(self, message: str, title: str = "오류"):
+        formatted = self._format_gui_error(message)
+        self._log(formatted)
+        messagebox.showerror(title, formatted)
+
+    def _show_gui_info(self, message: str, title: str = "완료"):
+        formatted = f"[GUI][INFO] {message}"
+        self._log(formatted)
+        messagebox.showinfo(title, formatted)
+
+    @staticmethod
+    def _parse_hex_color(s: str, default=(255, 255, 255)) -> Tuple[int, int, int]:
+        if not s:
+            return default
+        s = s.strip().lstrip("#")
+        if len(s) == 6:
+            try:
+                return int(s[0:2], 16), int(s[2:4], 16), int(s[4:6], 16)
+            except Exception:
+                return default
+        return default
+
+    @staticmethod
+    def _position_to_xy(pos: str, width: int, height: int, text_w: int, text_h: int, x_offset: int = 0, y_offset: int = 0) -> Tuple[int, int]:
+        pos = (pos or "").strip().lower()
+        if pos == "top":
+            x = (width - text_w) // 2
+            y = int(height * 0.08)
+        elif pos == "bottom":
+            x = (width - text_w) // 2
+            y = int(height * 0.82)
+        elif pos == "center":
+            x = (width - text_w) // 2
+            y = (height - text_h) // 2
+        elif pos == "left-top":
+            x = int(width * 0.06)
+            y = int(height * 0.08)
+        elif pos == "right-top":
+            x = int(width * 0.94 - text_w)
+            y = int(height * 0.08)
+        else:
+            x = (width - text_w) // 2
+            y = int(height * 0.82)
+
+        return x + x_offset, y + y_offset
+
     # -------------------------------------------------
     # 로그 / 큐
     # -------------------------------------------------
@@ -401,10 +451,10 @@ class TimelineEditorGUI:
                     self._log(str(payload))
                 elif typ == "done":
                     self._set_running(False)
-                    messagebox.showinfo(payload.get("title", "완료"), payload.get("message", "작업 완료"))
+                    self._show_gui_info(payload.get("message", "작업 완료"), title=payload.get("title", "완료"))
                 elif typ == "error":
                     self._set_running(False)
-                    messagebox.showerror(payload.get("title", "오류"), payload.get("message", "작업 실패"))
+                    self._show_gui_error(payload.get("message", "작업 실패"), title=payload.get("title", "오류"))
         except queue.Empty:
             pass
         finally:
@@ -506,20 +556,20 @@ class TimelineEditorGUI:
             tts = Path(self.tts_var.get().strip())
             timeline = Path(self.timeline_var.get().strip())
         except Exception:
-            messagebox.showerror("오류", "경로 확인 필요")
+            self._show_gui_error("경로 확인 필요")
             return False, None, None, None, None, None
 
         if not base.exists():
-            messagebox.showerror("오류", f"Project Base 없음\n{base}")
+            self._show_gui_error(f"Project Base 없음 | {base}")
             return False, None, None, None, None, None
         if not json_path.exists():
-            messagebox.showerror("오류", f"JSON 없음\n{json_path}")
+            self._show_gui_error(f"JSON 없음 | {json_path}")
             return False, None, None, None, None, None
         if not images.exists():
-            messagebox.showerror("오류", f"이미지 폴더 없음\n{images}")
+            self._show_gui_error(f"이미지 폴더 없음 | {images}")
             return False, None, None, None, None, None
         if not tts.exists():
-            messagebox.showerror("오류", f"TTS 폴더 없음\n{tts}")
+            self._show_gui_error(f"TTS 폴더 없음 | {tts}")
             return False, None, None, None, None, None
 
         return True, base, json_path, images, tts, timeline
@@ -536,7 +586,7 @@ class TimelineEditorGUI:
 
         def worker():
             try:
-                tl = build_master_audio_and_timeline(
+                tl = build_timeline_service(
                     project_dir=base,  # type: ignore[arg-type]
                     json_path=json_path,  # type: ignore[arg-type]
                     images_dir=images,  # type: ignore[arg-type]
@@ -557,7 +607,7 @@ class TimelineEditorGUI:
     def _load_timeline_from_file(self):
         timeline_path = Path(self.timeline_var.get().strip())
         if not timeline_path.exists():
-            messagebox.showerror("오류", f"timeline.json 없음\n{timeline_path}")
+            self._show_gui_error(f"timeline.json 없음 | {timeline_path}")
             return
 
         try:
@@ -581,11 +631,11 @@ class TimelineEditorGUI:
             self._refresh_preview()
             self._log(f"[OK] 타임라인 로드: {timeline_path}")
         except Exception as e:
-            messagebox.showerror("오류", str(e))
+            self._show_gui_error(str(e))
 
     def _save_timeline(self):
         if not self.timeline_data:
-            messagebox.showerror("오류", "로드된 타임라인이 없습니다.")
+            self._show_gui_error("로드된 타임라인이 없습니다.")
             return
         try:
             self._apply_meta_form(silent=True)
@@ -593,9 +643,9 @@ class TimelineEditorGUI:
             ensure_dir(timeline_path.parent)
             timeline_path.write_text(json.dumps(self.timeline_data, ensure_ascii=False, indent=2), encoding="utf-8")
             self._log(f"[OK] 저장 완료: {timeline_path}")
-            messagebox.showinfo("완료", f"저장 완료\n{timeline_path}")
+            self._show_gui_info(f"저장 완료 | {timeline_path}")
         except Exception as e:
-            messagebox.showerror("오류", str(e))
+            self._show_gui_error(str(e))
 
     def _snapshot(self):
         if self.timeline_data is not None:
@@ -710,7 +760,7 @@ class TimelineEditorGUI:
     def _apply_meta_form(self, silent: bool = False):
         if not self.timeline_data:
             if not silent:
-                messagebox.showerror("오류", "타임라인이 없습니다.")
+                self._show_gui_error("타임라인이 없습니다.")
             return
 
         self._snapshot()
@@ -724,12 +774,12 @@ class TimelineEditorGUI:
 
     def _apply_image_form(self):
         if not self.timeline_data:
-            messagebox.showerror("오류", "타임라인이 없습니다.")
+            self._show_gui_error("타임라인이 없습니다.")
             return
 
         sel = self.image_tree.selection()
         if not sel:
-            messagebox.showerror("오류", "이미지 항목을 선택하세요.")
+            self._show_gui_error("이미지 항목을 선택하세요.")
             return
         item_id = sel[0]
 
@@ -753,12 +803,12 @@ class TimelineEditorGUI:
 
     def _apply_subtitle_form(self):
         if not self.timeline_data:
-            messagebox.showerror("오류", "타임라인이 없습니다.")
+            self._show_gui_error("타임라인이 없습니다.")
             return
 
         sel = self.subtitle_tree.selection()
         if not sel:
-            messagebox.showerror("오류", "자막 항목을 선택하세요.")
+            self._show_gui_error("자막 항목을 선택하세요.")
             return
         item_id = sel[0]
 
@@ -785,7 +835,7 @@ class TimelineEditorGUI:
 
     def _add_image_item(self):
         if not self.timeline_data:
-            messagebox.showerror("오류", "타임라인이 없습니다.")
+            self._show_gui_error("타임라인이 없습니다.")
             return
         self._snapshot()
         idx = len(self.timeline_data.get("image_items", [])) + 1
@@ -821,7 +871,7 @@ class TimelineEditorGUI:
 
     def _add_subtitle_item(self):
         if not self.timeline_data:
-            messagebox.showerror("오류", "타임라인이 없습니다.")
+            self._show_gui_error("타임라인이 없습니다.")
             return
         self._snapshot()
         idx = len(self.timeline_data.get("subtitle_items", [])) + 1
@@ -940,14 +990,14 @@ class TimelineEditorGUI:
                         pos = str(sub.get("position", "bottom"))
                         x_off = safe_int(sub.get("x_offset", 0), 0)
                         y_off = safe_int(sub.get("y_offset", 0), 0)
-                        color = parse_hex_color(str(sub.get("font_color", "#FFFFFF")), (255, 255, 255))
+                        color = self._parse_hex_color(str(sub.get("font_color", "#FFFFFF")), (255, 255, 255))
                         box = safe_int(sub.get("box", 0), 0)
-                        box_color_rgb = parse_hex_color(str(sub.get("box_color", "#000000")), (0, 0, 0))
+                        box_color_rgb = self._parse_hex_color(str(sub.get("box_color", "#000000")), (0, 0, 0))
 
                         bbox = draw.multiline_textbbox((0, 0), txt, font=font2, spacing=4)
                         tw = bbox[2] - bbox[0]
                         th = bbox[3] - bbox[1]
-                        tx, ty = position_to_xy(pos, preview_w, preview_h, tw, th, x_off, y_off)
+                        tx, ty = self._position_to_xy(pos, preview_w, preview_h, tw, th, x_off, y_off)
 
                         if box:
                             draw.rounded_rectangle([tx - 10, ty - 6, tx + tw + 10, ty + th + 6], radius=8, fill=box_color_rgb)
@@ -974,7 +1024,7 @@ class TimelineEditorGUI:
         if self.is_running:
             return
         if not self.timeline_data:
-            messagebox.showerror("오류", "타임라인을 먼저 로드하세요.")
+            self._show_gui_error("타임라인을 먼저 로드하세요.")
             return
 
         self._apply_meta_form(silent=True)
@@ -983,7 +1033,7 @@ class TimelineEditorGUI:
         timeline_path = Path(self.timeline_var.get().strip())
         output_path = Path(self.output_var.get().strip())
         if not timeline_path.exists():
-            messagebox.showerror("오류", "timeline.json이 없습니다.")
+            self._show_gui_error("timeline.json이 없습니다.")
             return
         if not output_path.parent.exists():
             ensure_dir(output_path.parent)
@@ -993,7 +1043,7 @@ class TimelineEditorGUI:
 
         def worker():
             try:
-                out = render_timeline_to_video(
+                out = render_timeline_service(
                     timeline_path=timeline_path,
                     output_path=output_path,
                     logger=logger
@@ -1022,4 +1072,4 @@ class TimelineEditorGUI:
             else:
                 subprocess.Popen(["xdg-open", str(p)])
         except Exception as e:
-            messagebox.showerror("오류", str(e))
+            self._show_gui_error(str(e))

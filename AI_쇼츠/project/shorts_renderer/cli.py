@@ -1,11 +1,18 @@
 import argparse
 import sys
-import traceback
 from pathlib import Path
 
-from .renderer import render_timeline_to_video
-from .timeline_builder import build_master_audio_and_timeline
+from .renderer import render_timeline_service
+from .timeline_builder import build_timeline_service
 from .utils import log_print
+
+
+def _cli_error(message: str) -> str:
+    return f"[CLI][ERROR] {message}"
+
+
+def _cli_info(message: str) -> str:
+    return f"[CLI][INFO] {message}"
 
 def main():
     parser = argparse.ArgumentParser(description="Master Audio Timeline Shorts Editor")
@@ -39,7 +46,7 @@ def main():
 
     try:
         if not args.render_only:
-            build_master_audio_and_timeline(
+            build_timeline_service(
                 project_dir=base,
                 json_path=json_path,
                 images_dir=images_dir,
@@ -48,15 +55,14 @@ def main():
                 logger=log_print
             )
         if not args.build_only:
-            render_timeline_to_video(
+            render_timeline_service(
                 timeline_path=timeline_path,
                 output_path=output_path,
                 logger=log_print
             )
-        print(f"\n완료\nTimeline: {timeline_path}\nOutput: {output_path}")
+        print(_cli_info(f"완료 | timeline={timeline_path} | output={output_path}"))
     except Exception as e:
-        print(f"[ERROR] {e}")
-        traceback.print_exc()
+        print(_cli_error(str(e)))
         sys.exit(1)
 
 
