@@ -50,7 +50,7 @@ def main():
         return
 
     base = Path(args.base)
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    stamp = datetime.now().strftime("%Y%m%d%H%M%S")
     json_path = Path(args.json) if args.json else (base / "data" / "shorts.json")
     images_dir = Path(args.images_dir) if args.images_dir else (base / "assets" / "images" / "shorts")
     tts_dir = Path(args.tts_dir) if args.tts_dir else (base / "assets" / "tts" / "shorts")
