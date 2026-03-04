@@ -3,9 +3,6 @@ import sys
 import traceback
 from pathlib import Path
 
-import tkinter as tk
-
-from .gui import TimelineEditorGUI
 from .renderer import render_timeline_to_video
 from .timeline_builder import build_master_audio_and_timeline
 from .utils import log_print
@@ -24,6 +21,10 @@ def main():
     args = parser.parse_args()
 
     if args.gui or len(sys.argv) == 1:
+        import tkinter as tk
+
+        from .gui import TimelineEditorGUI
+
         root = tk.Tk()
         TimelineEditorGUI(root)
         root.mainloop()
@@ -57,3 +58,7 @@ def main():
         print(f"[ERROR] {e}")
         traceback.print_exc()
         sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
