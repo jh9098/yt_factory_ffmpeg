@@ -321,9 +321,10 @@ def render_timeline_to_video(
         fade_chain += f"format=rgba[{fade_label}]"
         filter_parts.append(fade_chain)
 
+        overlay_enable = f"between(t,{start:.3f},{end:.3f})"
         overlay = (
             f"[{prev_label}][{fade_label}]"
-            f"overlay=x={x}:y={y}:format=auto:shortest=0:eof_action=pass"
+            f"overlay=x={x}:y={y}:format=auto:shortest=0:repeatlast=0:enable='{overlay_enable}'"
             f"[{out_label}]"
         )
         filter_parts.append(overlay)
