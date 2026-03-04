@@ -1,6 +1,8 @@
 import json
 import math
 import os
+import shutil
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -151,6 +153,34 @@ def resolve_font_path(font_path_str: str) -> Optional[Path]:
 
     return None
 
+
+def prepare_filter_asset_dir(output_path: Path) -> Path:
+    """
+    drawtext(fontfile/textfile)에서 한글 경로 인코딩 이슈를 피하기 위해
+    가능한 한 ASCII 기반 임시 경로를 우선 사용한다.
+    """
+    candidates: List[Path] = []
+
+    if os.name == "nt":
+        system_root = Path(os.environ.get("SYSTEMROOT", r"C:\Windows"))
+        candidates.append(system_root / "Temp" / "shorts_renderer_drawtext")
+        candidates.append(Path(r"C:\Temp\shorts_renderer_drawtext"))
+
+    candidates.append(output_path.parent / "_drawtext_temp")
+    candidates.append(Path(tempfile.gettempdir()) / "shorts_renderer_drawtext")
+
+    for base in candidates:
+        try:
+            base.mkdir(parents=True, exist_ok=True)
+            if all(ord(ch) < 128 for ch in str(base)):
+                return base
+        except Exception:
+            continue
+
+    fallback = output_path.parent / "_drawtext_temp"
+    fallback.mkdir(parents=True, exist_ok=True)
+    return fallback
+
 def render_timeline_to_video(
     timeline_path: Path,
     output_path: Path,
@@ -208,10 +238,14 @@ def render_timeline_to_video(
             unique_image_paths.append(p)
 
     # -----------------------------
-    # 자막 텍스트 파일 임시 저장 폴더
+    # drawtext 자산(폰트/텍스트) 임시 저장 폴더
     # -----------------------------
-    temp_text_dir = output_path.parent / "_drawtext_temp"
+    temp_text_dir = prepare_filter_asset_dir(output_path)
     ensure_dir(temp_text_dir)
+
+    # Windows + ffmpeg drawtext에서 한글 경로가 들어가면 실패하는 사례 방지
+    temp_font_path = temp_text_dir / f"font_{os.getpid()}.ttf"
+    shutil.copy2(resolved_font, temp_font_path)
 
     filter_parts: List[str] = []
     filter_parts.append(
@@ -296,7 +330,7 @@ def render_timeline_to_video(
         prev_label = out_label
 
     current_label = prev_label
-    fontfile_escaped = ffmpeg_escape_path_for_filter(resolved_font)
+    fontfile_escaped = ffmpeg_escape_path_for_filter(temp_font_path)
 
     # -------------------------------------------------
     # 자막 / 오버레이 drawtext
