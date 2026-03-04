@@ -4,7 +4,14 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from .constants import DEFAULT_BG_COLOR, DEFAULT_FADE_SEC, DEFAULT_FPS, DEFAULT_HEIGHT, DEFAULT_WIDTH
+from .constants import (
+    DEFAULT_BG_COLOR,
+    DEFAULT_FADE_SEC,
+    DEFAULT_FONT_SIZE,
+    DEFAULT_FPS,
+    DEFAULT_HEIGHT,
+    DEFAULT_WIDTH,
+)
 from .ffmpeg_tools import ffprobe_duration_sec, run_cmd, which_ffmpeg
 from .utils import ensure_dir, log_print, normalize_motion_name, safe_float, safe_int
 
