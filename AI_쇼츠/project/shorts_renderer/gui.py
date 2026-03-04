@@ -374,12 +374,12 @@ class TimelineEditorGUI:
         base = Path(self.base_var.get().strip() or ".")
         if not self.base_var.get().strip():
             self.base_var.set(str(base.resolve()))
-        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.json_var.set(self.json_var.get().strip() or str(base / "data" / "shorts.json"))
-        self.images_var.set(self.images_var.get().strip() or str(base / "assets" / "images" / "shorts"))
-        self.tts_var.set(self.tts_var.get().strip() or str(base / "assets" / "tts" / "shorts"))
+        stamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        self.json_var.set(str(base / "data" / "shorts.json"))
+        self.images_var.set(str(base / "assets" / "images" / "shorts"))
+        self.tts_var.set(str(base / "assets" / "tts" / "shorts"))
         self.timeline_var.set(self.timeline_var.get().strip() or str(base / "data" / "timeline.json"))
-        self.output_var.set(self.output_var.get().strip() or str(base / "output" / f"{stamp}.mp4"))
+        self.output_var.set(str(base / "output" / f"{stamp}.mp4"))
         self.font_var.set(self.font_var.get().strip() or str(base / "assets" / "fonts" / "KoddiUDOnGothic-ExtraBold.ttf"))
 
     def _pick_base(self):
@@ -389,7 +389,8 @@ class TimelineEditorGUI:
             self._refresh_defaults_from_base()
 
     def _pick_json(self):
-        p = filedialog.askopenfilename(filetypes=[("JSON", "*.json")])
+        initialdir = Path(self.json_var.get().strip() or self.base_var.get().strip() or os.getcwd()).parent
+        p = filedialog.askopenfilename(initialdir=str(initialdir), filetypes=[("JSON", "*.json")])
         if p:
             self.json_var.set(p)
 
@@ -404,12 +405,19 @@ class TimelineEditorGUI:
             self.tts_var.set(d)
 
     def _pick_timeline(self):
-        p = filedialog.askopenfilename(filetypes=[("JSON", "*.json")])
+        initialdir = Path(self.timeline_var.get().strip() or self.base_var.get().strip() or os.getcwd()).parent
+        p = filedialog.askopenfilename(initialdir=str(initialdir), filetypes=[("JSON", "*.json")])
         if p:
             self.timeline_var.set(p)
 
     def _pick_output(self):
-        p = filedialog.asksaveasfilename(defaultextension=".mp4", filetypes=[("MP4", "*.mp4")])
+        output_path = Path(self.output_var.get().strip() or self.base_var.get().strip() or os.getcwd())
+        p = filedialog.asksaveasfilename(
+            initialdir=str(output_path.parent),
+            initialfile=output_path.name,
+            defaultextension=".mp4",
+            filetypes=[("MP4", "*.mp4")],
+        )
         if p:
             self.output_var.set(p)
 
@@ -584,7 +592,10 @@ class TimelineEditorGUI:
         self._save_timeline()
 
         p = Path(self.timeline_var.get().strip())
-        out = Path(self.output_var.get().strip())
+        output_dir = Path(self.output_var.get().strip()).parent
+        stamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        out = output_dir / f"{stamp}.mp4"
+        self.output_var.set(str(out))
         ensure_dir(out.parent)
 
         self._set_running(True)
