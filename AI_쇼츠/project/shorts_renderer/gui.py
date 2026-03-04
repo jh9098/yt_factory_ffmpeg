@@ -38,6 +38,8 @@ from .media_transform import normalized_crop
 from .edge_tts import EdgeTTSConfig
 from .renderer import render_timeline_service
 from .timeline_builder import build_timeline_service
+from .ui_theme import BUTTON_KIND, COLORS
+from .ui_tooltip import ToolTip
 from .utils import ensure_dir, safe_float, safe_int
 
 
@@ -56,7 +58,7 @@ class TimelineEditorGUI:
     def __init__(self, root: tk.Tk):
         self.root = root
         self.root.title("AI Shorts Studio")
-        self.root.geometry("1680x980")
+        self.root.minsize(1200, 760)
 
         self.use_ctk = ctk is not None
         if self.use_ctk:
@@ -90,6 +92,7 @@ class TimelineEditorGUI:
 
         self.zoom_var = tk.DoubleVar(value=70.0)
         self.snap_enabled_var = tk.BooleanVar(value=True)
+        self.current_step_var = tk.IntVar(value=1)
 
         self.timeline_data: Optional[Dict[str, Any]] = None
         self.undo_stack: List[Dict[str, Any]] = []
@@ -103,6 +106,8 @@ class TimelineEditorGUI:
         self.drag_state: Optional[Dict[str, Any]] = None
 
         self.preview_img_tk = None
+        self.path_entries: Dict[str, Any] = {}
+        self.field_hints: Dict[str, str] = {}
 
         self.vlc_instance = None
         self.vlc_player = None
@@ -125,14 +130,29 @@ class TimelineEditorGUI:
             return ctk.CTkLabel(parent, text=text, textvariable=textvariable)
         return ttk.Label(parent, text=text, textvariable=textvariable)
 
-    def _entry(self, parent, var, width=220):
+    def _entry(self, parent, var, width=220, field_key: Optional[str] = None, hint: str = ""):
         if self.use_ctk:
-            return ctk.CTkEntry(parent, textvariable=var, width=width)
-        return ttk.Entry(parent, textvariable=var, width=max(8, int(width / 9)))
+            ent = ctk.CTkEntry(parent, textvariable=var, width=width)
+        else:
+            ent = tk.Entry(parent, textvariable=var, width=max(8, int(width / 9)), bg="#10151f", fg="#e6edf3", insertbackground="#e6edf3")
+        if field_key:
+            self.path_entries[field_key] = ent
+        if hint:
+            self._bind_field_hint(ent, hint)
+        return ent
 
-    def _button(self, parent, text, command, width=100):
+    def _button(self, parent, text, command, width=100, kind: str = "secondary"):
+        button_kind = BUTTON_KIND.get(kind, BUTTON_KIND["secondary"])
         if self.use_ctk:
-            return ctk.CTkButton(parent, text=text, command=command, width=width)
+            return ctk.CTkButton(
+                parent,
+                text=text,
+                command=command,
+                width=width,
+                fg_color=button_kind["bg"],
+                hover_color=button_kind["hover"],
+                text_color=button_kind["fg"],
+            )
         return ttk.Button(parent, text=text, command=command)
 
     def _check(self, parent, text, var):
@@ -140,42 +160,124 @@ class TimelineEditorGUI:
             return ctk.CTkCheckBox(parent, text=text, variable=var)
         return ttk.Checkbutton(parent, text=text, variable=var)
 
+    def _bind_field_hint(self, widget, hint: str):
+        if not hint:
+            return
+        ToolTip(widget, hint)
+
+        def on_focus(_event=None):
+            self.status_var.set(f"도움말: {hint}")
+
+        widget.bind("<FocusIn>", on_focus, add="+")
+
+    def _mark_entry_error(self, field_key: str):
+        widget = self.path_entries.get(field_key)
+        if not widget:
+            return
+        try:
+            widget.focus_set()
+            if self.use_ctk:
+                widget.configure(border_color="#da3633")
+            else:
+                widget.configure(bg="#3f1d22")
+                self.root.after(1500, lambda: widget.configure(bg="#10151f"))
+        except Exception:
+            pass
+
+    def _validate_step1_paths(self, show_message: bool = True) -> bool:
+        checks = [
+            ("json", Path(self.json_var.get().strip()), "스크립트 JSON 파일을 찾을 수 없습니다."),
+            ("images", Path(self.images_var.get().strip()), "이미지 폴더를 찾을 수 없습니다."),
+            ("tts", Path(self.tts_var.get().strip()), "TTS 폴더를 찾을 수 없습니다."),
+        ]
+        errors = []
+        for key, target, msg in checks:
+            if not target.exists():
+                errors.append((key, msg, str(target)))
+
+        if not errors:
+            return True
+
+        for key, _, _ in errors:
+            self._mark_entry_error(key)
+        if show_message:
+            detail = "\n".join([f"- {msg}\n  경로: {path}\n  해결: 경로를 다시 선택하세요." for _, msg, path in errors])
+            messagebox.showerror("입력값 확인 필요", detail)
+        return False
+
+    def _switch_step(self, step: int, force: bool = False):
+        if not force:
+            if step >= 2 and not self._validate_step1_paths(show_message=True):
+                return
+            if step == 3 and not self.timeline_data:
+                messagebox.showerror("타임라인 필요", "먼저 2단계에서 타임라인 생성/불러오기를 완료하세요.")
+                return
+        self.current_step_var.set(step)
+        if step == 1:
+            self.step1_frame.tkraise()
+            self.status_var.set("1단계: 소스 경로를 확인한 뒤 '다음: 타임라인 편집'을 눌러주세요.")
+        elif step == 2:
+            self.step2_frame.tkraise()
+            self.status_var.set("2단계: 타임라인 생성/편집 후 저장하세요.")
+        else:
+            self.step3_frame.tkraise()
+            self.status_var.set("3단계: 출력 경로를 확인하고 렌더를 실행하세요.")
+
     def _build_ui(self):
         root = self._frame(self.root)
         root.pack(fill="both", expand=True, padx=10, pady=10)
 
-        top = self._frame(root)
-        top.pack(fill="x")
+        stepper = self._frame(root)
+        stepper.pack(fill="x", pady=(0, 8))
+        self._label(stepper, "작업 단계").pack(side="left", padx=(0, 8))
+        self.step_labels: Dict[int, tk.Label] = {}
+        for step, name in [(1, "1) 소스 연결"), (2, "2) 타임라인 편집"), (3, "3) 렌더")]:
+            btn = self._button(stepper, name, lambda s=step: self._switch_step(s), 130, kind="secondary")
+            btn.pack(side="left", padx=3)
+
+        self.step_container = self._frame(root)
+        self.step_container.pack(fill="both", expand=True)
+        self.step_container.rowconfigure(0, weight=1)
+        self.step_container.columnconfigure(0, weight=1)
+
+        self.step1_frame = self._frame(self.step_container)
+        self.step2_frame = self._frame(self.step_container)
+        self.step3_frame = self._frame(self.step_container)
+        for frame in [self.step1_frame, self.step2_frame, self.step3_frame]:
+            frame.grid(row=0, column=0, sticky="nsew")
+
+        top = self._frame(self.step1_frame)
+        top.pack(fill="x", padx=6, pady=6)
         rows = [
-            ("Project Base", self.base_var, self._pick_base, "Folder"),
-            ("Script JSON", self.json_var, self._pick_json, "File"),
-            ("Image Folder", self.images_var, self._pick_images, "Folder"),
-            ("TTS Folder", self.tts_var, self._pick_tts, "Folder"),
-            ("Timeline JSON", self.timeline_var, self._pick_timeline, "File"),
-            ("Output MP4", self.output_var, self._pick_output, "Save"),
+            ("프로젝트 기준 폴더", self.base_var, self._pick_base, "폴더", "base", "프로젝트 루트 폴더를 선택하세요."),
+            ("스크립트 JSON", self.json_var, self._pick_json, "파일", "json", "쇼츠 대본 JSON 파일 경로입니다."),
+            ("이미지 폴더", self.images_var, self._pick_images, "폴더", "images", "이미지 소스가 들어있는 폴더입니다."),
+            ("TTS 폴더", self.tts_var, self._pick_tts, "폴더", "tts", "오디오(TTS) 파일 폴더입니다."),
+            ("타임라인 JSON", self.timeline_var, self._pick_timeline, "파일", "timeline", "편집 결과 타임라인 파일입니다."),
+            ("출력 MP4", self.output_var, self._pick_output, "저장", "output", "렌더링 결과 영상 파일 경로입니다."),
         ]
-        for i, (name, var, fn, btxt) in enumerate(rows):
+        for i, (name, var, fn, btxt, key, hint) in enumerate(rows):
             self._label(top, name).grid(row=i, column=0, sticky="w", pady=2)
-            self._entry(top, var, 920).grid(row=i, column=1, sticky="ew", padx=4, pady=2)
+            self._entry(top, var, 90, field_key=key, hint=hint).grid(row=i, column=1, sticky="ew", padx=4, pady=2)
             self._button(top, btxt, fn, 80).grid(row=i, column=2, padx=2)
         top.grid_columnconfigure(1, weight=1)
+        self._button(top, "다음: 타임라인 편집", lambda: self._switch_step(2), 180, kind="primary").grid(row=len(rows), column=2, sticky="e", pady=(8, 0))
 
-        bar = self._frame(root)
-        bar.pack(fill="x", pady=(8, 8))
+        bar = self._frame(self.step2_frame)
+        bar.pack(fill="x", pady=(4, 8))
 
-        for txt, var, w in [("W", self.width_var, 70), ("H", self.height_var, 70), ("FPS", self.fps_var, 60), ("BG", self.bg_var, 80)]:
+        for txt, var, w, hint in [("가로", self.width_var, 70, "최종 영상의 가로 픽셀입니다."), ("세로", self.height_var, 70, "최종 영상의 세로 픽셀입니다."), ("FPS", self.fps_var, 60, "초당 프레임 수입니다."), ("배경색", self.bg_var, 80, "black/white/gray 중 선택 권장")]:
             self._label(bar, txt).pack(side="left")
-            self._entry(bar, var, w).pack(side="left", padx=(4, 10))
+            self._entry(bar, var, w, hint=hint).pack(side="left", padx=(4, 10))
 
-        self._check(bar, "Edge TTS", self.edge_tts_enabled_var).pack(side="left", padx=4)
-        self._check(bar, "Overwrite", self.edge_tts_overwrite_var).pack(side="left", padx=4)
-        self._entry(bar, self.edge_voice_var, 200).pack(side="left", padx=4)
+        self._check(bar, "Edge TTS 사용", self.edge_tts_enabled_var).pack(side="left", padx=4)
+        self._check(bar, "기존 TTS 덮어쓰기", self.edge_tts_overwrite_var).pack(side="left", padx=4)
+        self._entry(bar, self.edge_voice_var, 200, hint="예: ko-KR-SunHiNeural").pack(side="left", padx=4)
 
-        self.btn_build = self._button(bar, "1) Build", self._start_build_timeline, 90)
-        self.btn_load = self._button(bar, "2) Load", self._load_timeline_from_file, 80)
-        self.btn_save = self._button(bar, "Save", self._save_timeline, 70)
-        self.btn_render = self._button(bar, "3) Render", self._start_render_timeline, 90)
-        for b in [self.btn_build, self.btn_load, self.btn_save, self.btn_render]:
+        self.btn_build = self._button(bar, "타임라인 생성", self._start_build_timeline, 110, kind="primary")
+        self.btn_load = self._button(bar, "타임라인 불러오기", self._load_timeline_from_file, 120)
+        self.btn_save = self._button(bar, "편집 저장", self._save_timeline, 90)
+        for b in [self.btn_build, self.btn_load, self.btn_save]:
             b.pack(side="left", padx=2)
         self._button(bar, "Undo", self._undo, 70).pack(side="left", padx=2)
         self._button(bar, "Redo", self._redo, 70).pack(side="left", padx=2)
@@ -187,9 +289,7 @@ class TimelineEditorGUI:
         self._button(bar, "+", lambda: self._zoom_step(10), 32).pack(side="left", padx=1)
         self._button(bar, "-", lambda: self._zoom_step(-10), 32).pack(side="left", padx=1)
 
-        self._label(bar, textvariable=self.status_var).pack(side="right")
-
-        body = self._frame(root)
+        body = self._frame(self.step2_frame)
         body.pack(fill="both", expand=True)
         body.columnconfigure(0, weight=3)
         body.columnconfigure(1, weight=2)
@@ -203,10 +303,22 @@ class TimelineEditorGUI:
         self._build_left(left)
         self._build_right(right)
 
+        render_box = self._frame(self.step3_frame)
+        render_box.pack(fill="x", padx=6, pady=8)
+        self._label(render_box, "출력 파일").grid(row=0, column=0, sticky="w")
+        self._entry(render_box, self.output_var, 90, field_key="output", hint="렌더 결과 MP4 경로").grid(row=0, column=1, sticky="ew", padx=4)
+        self._button(render_box, "경로 선택", self._pick_output, 90).grid(row=0, column=2, padx=2)
+        self.btn_render = self._button(render_box, "최종 렌더 시작", self._start_render_timeline, 130, kind="primary")
+        self.btn_render.grid(row=1, column=2, sticky="e", pady=(8, 0))
+        self._button(render_box, "이전: 편집", lambda: self._switch_step(2), 100).grid(row=1, column=1, sticky="w", pady=(8, 0))
+        render_box.grid_columnconfigure(1, weight=1)
+
         log_box = self._frame(root)
         log_box.pack(fill="both", expand=False, pady=(8, 0))
-        self.log_text = tk.Text(log_box, height=8, bg="#0d1117", fg="#c9d1d9")
+        self.log_text = tk.Text(log_box, height=8, bg=COLORS["log_bg"], fg=COLORS["log_fg"])
         self.log_text.pack(fill="both", expand=True)
+        self._label(log_box, textvariable=self.status_var).pack(anchor="e", pady=(4, 0))
+        self._switch_step(1, force=True)
 
     def _build_left(self, left):
         self.preview_stack = tk.Frame(left, bg="#111", width=DEFAULT_PREVIEW_W, height=DEFAULT_PREVIEW_H)
@@ -224,7 +336,7 @@ class TimelineEditorGUI:
         seek.pack(fill="x", pady=(0, 6))
         self.seek_scale = tk.Scale(seek, orient="horizontal", resolution=0.01, from_=0, to=100, variable=self.playhead_var, command=self._on_seek_changed)
         self.seek_scale.pack(side="left", fill="x", expand=True)
-        self._button(seek, "Play", self._play_preview, 60).pack(side="left", padx=2)
+        self._button(seek, "Play", self._play_preview, 60, kind="primary").pack(side="left", padx=2)
         self._button(seek, "Pause", self._pause_preview, 60).pack(side="left", padx=2)
         self._label(seek, textvariable=self.duration_var).pack(side="left", padx=6)
 
@@ -233,10 +345,10 @@ class TimelineEditorGUI:
 
         self.timeline_canvas = tk.Canvas(
             timeline_wrap,
-            bg="#0f1116",
+            bg=COLORS["canvas_bg"],
             height=self.timeline_h,
             highlightthickness=1,
-            highlightbackground="#2d3648",
+            highlightbackground=COLORS["border"],
         )
         self.timeline_canvas.pack(side="top", fill="both", expand=True)
 
@@ -255,7 +367,7 @@ class TimelineEditorGUI:
 
         clip_box = self._frame(right)
         clip_box.grid(row=0, column=0, sticky="nsew", pady=(0, 6))
-        self._label(clip_box, "Clip Inspector (Video/Image)").pack(anchor="w")
+        self._label(clip_box, "클립 속성 편집 (영상/이미지)").pack(anchor="w")
 
         self.clip_type_var = tk.StringVar(value="image")
         self.clip_path_var = tk.StringVar(value="")
@@ -276,21 +388,21 @@ class TimelineEditorGUI:
         form = self._frame(clip_box)
         form.pack(fill="x", pady=4)
         rows = [
-            ("Type", self.clip_type_var),
-            ("Path", self.clip_path_var),
-            ("Start", self.clip_start_var),
-            ("End", self.clip_end_var),
-            ("ClipIn", self.clip_clipin_var),
-            ("ClipOut", self.clip_clipout_var),
-            ("Layer", self.clip_layer_var),
-            ("Motion", self.clip_motion_var),
-            ("Scale", self.clip_scale_mode_var),
+            ("유형(type)", self.clip_type_var),
+            ("파일 경로", self.clip_path_var),
+            ("타임라인 시작", self.clip_start_var),
+            ("타임라인 종료", self.clip_end_var),
+            ("원본 시작시간", self.clip_clipin_var),
+            ("원본 종료시간", self.clip_clipout_var),
+            ("레이어(앞/뒤 순서)", self.clip_layer_var),
+            ("모션", self.clip_motion_var),
+            ("크기 맞춤", self.clip_scale_mode_var),
             ("X", self.clip_x_var),
             ("Y", self.clip_y_var),
-            ("CropX(0~1)", self.clip_crop_x_var),
-            ("CropY(0~1)", self.clip_crop_y_var),
-            ("CropW(0~1)", self.clip_crop_w_var),
-            ("CropH(0~1)", self.clip_crop_h_var),
+            ("자르기 X 비율(0~1)", self.clip_crop_x_var),
+            ("자르기 Y 비율(0~1)", self.clip_crop_y_var),
+            ("자르기 너비 비율(0~1)", self.clip_crop_w_var),
+            ("자르기 높이 비율(0~1)", self.clip_crop_h_var),
         ]
         for i, (n, v) in enumerate(rows):
             self._label(form, n).grid(row=i, column=0, sticky="w", pady=1)
@@ -299,15 +411,15 @@ class TimelineEditorGUI:
 
         btns = self._frame(clip_box)
         btns.pack(fill="x")
-        self._button(btns, "Add Image", self._add_image_clip, 90).pack(side="left", padx=1)
-        self._button(btns, "Add Video", self._add_video_clip, 90).pack(side="left", padx=1)
-        self._button(btns, "Apply", self._apply_clip_form, 70).pack(side="left", padx=1)
-        self._button(btns, "Delete", self._delete_selected_clip, 70).pack(side="left", padx=1)
+        self._button(btns, "이미지 추가", self._add_image_clip, 90, kind="primary").pack(side="left", padx=1)
+        self._button(btns, "영상 추가", self._add_video_clip, 90, kind="primary").pack(side="left", padx=1)
+        self._button(btns, "적용", self._apply_clip_form, 70).pack(side="left", padx=1)
+        self._button(btns, "삭제", self._delete_selected_clip, 70, kind="danger").pack(side="left", padx=1)
         sub_box = self._frame(right)
         sub_box.grid(row=1, column=0, sticky="nsew", pady=(0, 6))
-        self._label(sub_box, "Overlay/Subtitles Track").pack(anchor="w")
+        self._label(sub_box, "오버레이/자막 트랙").pack(anchor="w")
 
-        self.subtitle_list = tk.Listbox(sub_box, bg="#151922", fg="#e6edf3", selectbackground="#2b5f9e")
+        self.subtitle_list = tk.Listbox(sub_box, bg=COLORS["list_bg"], fg=COLORS["list_fg"], selectbackground=COLORS["list_select"])
         self.subtitle_list.pack(fill="both", expand=True, pady=4)
         self.subtitle_list.bind("<<ListboxSelect>>", self._on_subtitle_select)
 
@@ -320,21 +432,21 @@ class TimelineEditorGUI:
 
         sf = self._frame(sub_box)
         sf.pack(fill="x")
-        self._label(sf, "S").pack(side="left")
+        self._label(sf, "시작").pack(side="left")
         self._entry(sf, self.sub_start_var, 70).pack(side="left", padx=2)
-        self._label(sf, "E").pack(side="left")
+        self._label(sf, "종료").pack(side="left")
         self._entry(sf, self.sub_end_var, 70).pack(side="left", padx=2)
-        self._label(sf, "Pos").pack(side="left")
+        self._label(sf, "위치").pack(side="left")
         self._entry(sf, self.sub_pos_var, 90).pack(side="left", padx=2)
-        self._button(sf, "Add", self._add_subtitle, 55).pack(side="left", padx=1)
-        self._button(sf, "Apply", self._apply_subtitle_form, 60).pack(side="left", padx=1)
-        self._button(sf, "Del", self._delete_selected_subtitle, 55).pack(side="left", padx=1)
+        self._button(sf, "추가", self._add_subtitle, 55, kind="primary").pack(side="left", padx=1)
+        self._button(sf, "적용", self._apply_subtitle_form, 60).pack(side="left", padx=1)
+        self._button(sf, "삭제", self._delete_selected_subtitle, 55, kind="danger").pack(side="left", padx=1)
 
         bgm_box = self._frame(right)
         bgm_box.grid(row=2, column=0, sticky="nsew")
-        self._label(bgm_box, "BGM Track").pack(anchor="w")
+        self._label(bgm_box, "배경음(BGM) 트랙").pack(anchor="w")
 
-        self.bgm_list = tk.Listbox(bgm_box, bg="#15221a", fg="#e6edf3", selectbackground="#2b5f9e")
+        self.bgm_list = tk.Listbox(bgm_box, bg=COLORS["bgm_list_bg"], fg=COLORS["list_fg"], selectbackground=COLORS["list_select"])
         self.bgm_list.pack(fill="both", expand=True, pady=4)
         self.bgm_list.bind("<<ListboxSelect>>", self._on_bgm_select)
 
@@ -348,13 +460,13 @@ class TimelineEditorGUI:
         bf = self._frame(bgm_box)
         bf.pack(fill="x")
         self._entry(bf, self.bgm_path_var, 230).pack(side="left", padx=2)
-        self._button(bf, "Audio", self._add_bgm_clip, 60).pack(side="left", padx=1)
-        self._button(bf, "Apply", self._apply_bgm_form, 60).pack(side="left", padx=1)
-        self._button(bf, "Del", self._delete_selected_bgm, 50).pack(side="left", padx=1)
+        self._button(bf, "오디오", self._add_bgm_clip, 60, kind="primary").pack(side="left", padx=1)
+        self._button(bf, "적용", self._apply_bgm_form, 60).pack(side="left", padx=1)
+        self._button(bf, "삭제", self._delete_selected_bgm, 50, kind="danger").pack(side="left", padx=1)
 
         bf2 = self._frame(bgm_box)
         bf2.pack(fill="x", pady=(2, 0))
-        for label, var, width in [("S", self.bgm_start_var, 56), ("E", self.bgm_end_var, 56), ("In", self.bgm_in_var, 56), ("Out", self.bgm_out_var, 56), ("Vol", self.bgm_vol_var, 56)]:
+        for label, var, width in [("시작", self.bgm_start_var, 56), ("종료", self.bgm_end_var, 56), ("원본 시작", self.bgm_in_var, 56), ("원본 종료", self.bgm_out_var, 56), ("볼륨", self.bgm_vol_var, 56)]:
             self._label(bf2, label).pack(side="left")
             self._entry(bf2, var, width).pack(side="left", padx=2)
 
@@ -367,7 +479,7 @@ class TimelineEditorGUI:
         state = "disabled" if running else "normal"
         for b in [self.btn_build, self.btn_load, self.btn_save, self.btn_render]:
             b.configure(state=state)
-        self.status_var.set("Working..." if running else "Ready")
+        self.status_var.set("작업 진행 중..." if running else "Ready")
 
     def _drain_ui_queue(self):
         while True:
@@ -379,7 +491,7 @@ class TimelineEditorGUI:
                 self._log(str(payload))
             elif kind == "done":
                 self._set_running(False)
-                messagebox.showinfo(payload.get("title", "Done"), payload.get("message", ""))
+                messagebox.showinfo(payload.get("title", "Done"), payload.get("message", "") + "\n\n다음 단계 버튼으로 이어서 진행하세요.")
             elif kind == "error":
                 self._set_running(False)
                 messagebox.showerror(payload.get("title", "Error"), payload.get("message", ""))
@@ -507,8 +619,7 @@ class TimelineEditorGUI:
         images_dir = Path(self.images_var.get().strip())
         tts_dir = Path(self.tts_var.get().strip())
         timeline_path = Path(self.timeline_var.get().strip())
-        if not json_path.exists() or not images_dir.exists() or not tts_dir.exists():
-            messagebox.showerror("Error", "Check JSON/images/TTS paths")
+        if not self._validate_step1_paths(show_message=True):
             return
 
         self._set_running(True)
@@ -541,7 +652,8 @@ class TimelineEditorGUI:
     def _load_timeline_from_file(self):
         p = Path(self.timeline_var.get().strip())
         if not p.exists():
-            messagebox.showerror("Error", f"Not found: {p}")
+            self._mark_entry_error("timeline")
+            messagebox.showerror("타임라인 파일 없음", f"타임라인 JSON 파일이 없습니다.\n경로: {p}\n해결: 경로를 다시 선택하세요.")
             return
         self.timeline_data = json.loads(p.read_text(encoding="utf-8"))
         self._after_load(reset_history=True)
