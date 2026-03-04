@@ -1,4 +1,4 @@
-import json
+﻿import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -13,20 +13,16 @@ from .constants import (
     SUPPORTED_AUD_EXTS,
     SUPPORTED_IMG_EXTS,
 )
-from .ffmpeg_tools import (
-    concat_wavs,
-    cut_wav_segment,
-    ffprobe_duration_sec,
-    normalize_audio_to_wav,
-)
 from .edge_tts import EdgeTTSConfig, synthesize_text_to_file
+from .ffmpeg_tools import concat_wavs, cut_wav_segment, ffprobe_duration_sec, normalize_audio_to_wav
 from .utils import ensure_dir, log_print, normalize_motion_name, safe_float, sanitize_folder_name
+
 
 def scene_id_candidates(scene_id: str, idx: int) -> List[str]:
     s = str(scene_id).strip()
     out: List[str] = []
 
-    def add(x: str):
+    def add(x: str) -> None:
         x = str(x).strip()
         if x and x not in out:
             out.append(x)
@@ -52,6 +48,7 @@ def scene_id_candidates(scene_id: str, idx: int) -> List[str]:
     add(f"S{idx:02d}")
     return out
 
+
 def find_by_scene_id(base_dir: Path, scene_id: str, exts: List[str], idx: int) -> Optional[Path]:
     cands = scene_id_candidates(scene_id, idx)
 
@@ -62,14 +59,15 @@ def find_by_scene_id(base_dir: Path, scene_id: str, exts: List[str], idx: int) -
                 return p
 
     if base_dir.exists():
-        want = set([x.lower() for x in cands])
+        want = {x.lower() for x in cands}
         for fp in base_dir.iterdir():
             if fp.is_file() and fp.suffix.lower() in exts and fp.stem.lower() in want:
                 return fp
 
     return None
 
-def load_json_schema_compliant(json_path: Path) -> Dict:
+
+def load_json_schema_compliant(json_path: Path) -> Dict[str, Any]:
     try:
         raw = json_path.read_text(encoding="utf-8-sig")
     except Exception:
@@ -77,21 +75,25 @@ def load_json_schema_compliant(json_path: Path) -> Dict:
 
     data = json.loads(raw)
     if not isinstance(data, dict):
-        raise ValueError("JSON 루트는 object여야 합니다.")
+        raise ValueError("JSON root must be object.")
 
     if "scenes" not in data or not isinstance(data["scenes"], list):
-        raise ValueError("JSON에 scenes(list)가 필요합니다.")
+        raise ValueError("JSON must contain scenes(list).")
 
     meta_required = [
-        "title", "target_audience", "tone",
-        "safety_notes", "cta", "estimated_total_duration_sec"
+        "title",
+        "target_audience",
+        "tone",
+        "safety_notes",
+        "cta",
+        "estimated_total_duration_sec",
     ]
 
     meta_obj = data.get("meta")
     if isinstance(meta_obj, dict):
         miss = [k for k in meta_required if k not in meta_obj]
         if miss:
-            raise ValueError(f"meta 누락: {miss}")
+            raise ValueError(f"Missing meta fields: {miss}")
         normalized = dict(data)
         for k in meta_required:
             normalized[k] = meta_obj[k]
@@ -99,15 +101,16 @@ def load_json_schema_compliant(json_path: Path) -> Dict:
     else:
         miss = [k for k in meta_required if k not in data]
         if miss:
-            raise ValueError(f"루트 메타 누락: {miss}")
+            raise ValueError(f"Missing root fields: {miss}")
 
     for i, sc in enumerate(data["scenes"], start=1):
         if not isinstance(sc, dict):
-            raise ValueError(f"scene #{i}가 object가 아닙니다.")
+            raise ValueError(f"scene #{i} must be object.")
         if "scene_id" not in sc:
-            raise ValueError(f"scene #{i} scene_id 누락")
+            raise ValueError(f"scene #{i} missing scene_id")
 
     return data
+
 
 def resolve_tts_dirs(tts_selected_dir: Path, images_dir: Path) -> Tuple[Path, Path]:
     job_name = sanitize_folder_name(images_dir.name)
@@ -129,6 +132,7 @@ def resolve_tts_dirs(tts_selected_dir: Path, images_dir: Path) -> Tuple[Path, Pa
 
     return candidate_job_dir, tts_selected_dir
 
+
 def find_tts_for_scene(tts_selected_dir: Path, images_dir: Path, scene_id: str, idx: int) -> Optional[Path]:
     job_tts_dir, common_tts_dir = resolve_tts_dirs(tts_selected_dir, images_dir)
 
@@ -142,11 +146,7 @@ def find_tts_for_scene(tts_selected_dir: Path, images_dir: Path, scene_id: str, 
 
 
 def _scene_tts_text(scene: Dict[str, Any]) -> str:
-    candidates = [
-        scene.get("tts_text"),
-        scene.get("voice_text"),
-        scene.get("narration_text"),
-    ]
+    candidates = [scene.get("tts_text"), scene.get("voice_text"), scene.get("narration_text")]
     for text in candidates:
         if isinstance(text, str) and text.strip():
             return text.strip()
@@ -178,7 +178,7 @@ def _auto_generate_edge_tts_if_needed(
         existing_audio = find_tts_for_scene(tts_dir, images_dir, scene_id, i)
 
         if existing_audio and not edge_tts_config.overwrite:
-            logger(f"[INFO] EdgeTTS 건너뜀(이미 파일 있음): scene_id={scene_id} | {existing_audio}")
+            logger(f"[INFO] Skip EdgeTTS (exists): scene_id={scene_id} | {existing_audio}")
             continue
 
         if existing_audio and edge_tts_config.overwrite:
@@ -188,9 +188,10 @@ def _auto_generate_edge_tts_if_needed(
 
         tts_text = _scene_tts_text(scene)
         if not tts_text:
-            raise ValueError(f"EdgeTTS 텍스트 누락: scene_id={scene_id} (tts_text 또는 subtitle_lines 필요)")
+            raise ValueError(f"Missing EdgeTTS text: scene_id={scene_id}")
 
         synthesize_text_to_file(tts_text, out_path, edge_tts_config, logger=logger)
+
 
 def build_master_audio_and_timeline(
     project_dir: Path,
@@ -211,11 +212,12 @@ def build_master_audio_and_timeline(
     ensure_dir(wav_dir)
     ensure_dir(out_timeline_path.parent)
 
-    audio_scene_rows = []
+    audio_scene_rows: List[Dict[str, Any]] = []
     norm_wavs: List[Path] = []
 
     cur = 0.0
     image_items: List[Dict[str, Any]] = []
+    media_items: List[Dict[str, Any]] = []
     subtitle_items: List[Dict[str, Any]] = []
 
     if edge_tts_config and edge_tts_config.enabled:
@@ -227,7 +229,6 @@ def build_master_audio_and_timeline(
             logger=logger,
         )
 
-    # tts 폴더 안 wav 후보 미리 수집
     wav_candidates = sorted(list(tts_dir.glob("*.wav")))
     single_master_tts = wav_candidates[0] if len(wav_candidates) == 1 else None
     master_norm = wav_dir / "MASTER_48K_ST.wav"
@@ -238,38 +239,28 @@ def build_master_audio_and_timeline(
         aud = find_tts_for_scene(tts_dir, images_dir, scene_id, i)
 
         if not img:
-            raise FileNotFoundError(f"이미지 누락: scene_id={scene_id}")
+            raise FileNotFoundError(f"Missing image: scene_id={scene_id}")
 
         norm_wav = wav_dir / f"{i:03d}_{scene_id}.wav"
 
-        # -------------------------------------------------
-        # 1) 씬별 TTS가 있으면 그대로 사용
-        # 2) 없고 tts_dir에 wav가 1개뿐이면 마스터 TTS를 씬별 분할
-        #    (짧아도 부족분은 무음 패딩)
-        # -------------------------------------------------
         if (aud is not None) and Path(aud).exists():
             normalize_audio_to_wav(Path(aud), norm_wav, logger=logger)
             source_audio_for_row = Path(aud)
-
         else:
             if single_master_tts is None:
-                raise FileNotFoundError(f"TTS 누락: scene_id={scene_id}")
+                raise FileNotFoundError(f"Missing TTS: scene_id={scene_id}")
 
-            # 마스터 TTS를 먼저 표준 wav로 1회 정규화
             if not master_norm.exists():
                 normalize_audio_to_wav(single_master_tts, master_norm, logger=logger)
 
-            # JSON의 start_time / end_time / duration_sec 기준으로 분할
             st = safe_float(scene.get("start_time", 0.0), 0.0)
-
             if scene.get("end_time") is not None:
                 et = safe_float(scene.get("end_time"), 0.0)
                 dur = max(0.01, et - st)
             else:
                 dur = safe_float(scene.get("duration_sec", 0.0), 0.0)
                 if dur <= 0:
-                    dur = 1.0  # duration 정보가 전혀 없으면 최소 1초
-
+                    dur = 1.0
             cut_wav_segment(master_norm, norm_wav, st, dur, logger=logger)
             source_audio_for_row = single_master_tts
 
@@ -279,32 +270,31 @@ def build_master_audio_and_timeline(
         end = start + dur
         cur = end
 
-        audio_scene_rows.append({
-            "scene_id": scene_id,
-            "audio_path": str(source_audio_for_row),
-            "normalized_wav_path": str(norm_wav),
-            "duration_sec": round(dur, 3),
-            "start_sec": round(start, 3),
-            "end_sec": round(end, 3),
-        })
+        audio_scene_rows.append(
+            {
+                "scene_id": scene_id,
+                "audio_path": str(source_audio_for_row),
+                "normalized_wav_path": str(norm_wav),
+                "duration_sec": round(dur, 3),
+                "start_sec": round(start, 3),
+                "end_sec": round(end, 3),
+            }
+        )
         norm_wavs.append(norm_wav)
 
-        overlay_text = scene.get("overlay_text") or ""
-        overlay_pos = scene.get("overlay_position") or "top"
-        subtitle_lines = scene.get("subtitle_lines") or []
-        subtitle_text = "\n".join([str(x) for x in subtitle_lines if str(x).strip()]).strip()
+        motion = normalize_motion_name(
+            str(scene.get("camera_motion", {}).get("motion_type", "hold"))
+            if isinstance(scene.get("camera_motion"), dict)
+            else str(scene.get("camera_motion", "hold"))
+        )
 
-        image_items.append({
+        image_item = {
             "id": f"img_{i}",
             "scene_id": scene_id,
             "path": str(img),
             "start_sec": round(start, 3),
             "end_sec": round(end, 3),
-            "motion": normalize_motion_name(
-                str(scene.get("camera_motion", {}).get("motion_type", "hold"))
-                if isinstance(scene.get("camera_motion"), dict)
-                else str(scene.get("camera_motion", "hold"))
-            ),
+            "motion": motion,
             "motion_strength": 0.06,
             "fade_in_sec": DEFAULT_FADE_SEC,
             "fade_out_sec": DEFAULT_FADE_SEC,
@@ -312,49 +302,78 @@ def build_master_audio_and_timeline(
             "x": 0,
             "y": 0,
             "scale_mode": "cover",
-        })
+            "track": "video",
+        }
+        image_items.append(image_item)
+
+        media_items.append(
+            {
+                **image_item,
+                "id": f"media_{i}",
+                "type": "image",
+                "clip_in_sec": 0.0,
+                "clip_out_sec": round(end - start, 3),
+                "track": "video",
+            }
+        )
+
+        overlay_text = scene.get("overlay_text") or ""
+        overlay_pos = scene.get("overlay_position") or "top"
+        subtitle_lines = scene.get("subtitle_lines") or []
+        subtitle_text = "\n".join([str(x) for x in subtitle_lines if str(x).strip()]).strip()
 
         if overlay_text:
-            subtitle_items.append({
-                "id": f"txt_overlay_{i}",
-                "scene_id": scene_id,
-                "kind": "overlay",
-                "text": overlay_text,
-                "start_sec": round(start, 3),
-                "end_sec": round(min(end, start + 2.5), 3),
-                "position": overlay_pos if overlay_pos in ["top", "bottom", "center", "left-top", "right-top"] else "top",
-                "x_offset": 0,
-                "y_offset": 0,
-                "font_size": DEFAULT_OVERLAY_FONT_SIZE,
-                "font_color": "#FFFFFF",
-                "border_color": "#000000",
-                "border_w": 4,
-                "box": 0,
-                "box_color": "#000000",
-                "box_alpha": 0.0,
-                "layer": 1,
-            })
+            subtitle_items.append(
+                {
+                    "id": f"txt_overlay_{i}",
+                    "scene_id": scene_id,
+                    "kind": "overlay",
+                    "text": overlay_text,
+                    "start_sec": round(start, 3),
+                    "end_sec": round(min(end, start + 2.5), 3),
+                    "position": overlay_pos
+                    if overlay_pos in ["top", "bottom", "center", "left-top", "right-top"]
+                    else "top",
+                    "x_offset": 0,
+                    "y_offset": 0,
+                    "font_size": DEFAULT_OVERLAY_FONT_SIZE,
+                    "font_color": "#FFFFFF",
+                    "border_color": "#000000",
+                    "border_w": 4,
+                    "box": 0,
+                    "box_color": "#000000",
+                    "box_alpha": 0.0,
+                    "layer": 1,
+                    "track": "overlay",
+                }
+            )
 
         if subtitle_text:
-            subtitle_items.append({
-                "id": f"txt_sub_{i}",
-                "scene_id": scene_id,
-                "kind": "subtitle",
-                "text": subtitle_text,
-                "start_sec": round(start, 3),
-                "end_sec": round(end, 3),
-                "position": "bottom",
-                "x_offset": 0,
-                "y_offset": 0,
-                "font_size": DEFAULT_FONT_SIZE,
-                "font_color": "#FFFFFF",
-                "border_color": "#000000",
-                "border_w": 4,
-                "box": 1,
-                "box_color": "#000000",
-                "box_alpha": 0.35,
-                "layer": 2,
-            })
+            subtitle_items.append(
+                {
+                    "id": f"txt_sub_{i}",
+                    "scene_id": scene_id,
+                    "kind": "subtitle",
+                    "text": subtitle_text,
+                    "start_sec": round(start, 3),
+                    "end_sec": round(end, 3),
+                    "position": "bottom",
+                    "x_offset": 0,
+                    "y_offset": 0,
+                    "font_size": DEFAULT_FONT_SIZE,
+                    "font_color": "#FFFFFF",
+                    "border_color": "#000000",
+                    "border_w": 4,
+                    "box": 1,
+                    "box_color": "#000000",
+                    "box_alpha": 0.35,
+                    "layer": 2,
+                    "track": "overlay",
+                }
+            )
+
+    if not norm_wavs:
+        raise ValueError("No scene audio segments were created.")
 
     master_audio = temp_dir / "master_audio.wav"
     concat_wavs(norm_wavs, master_audio, logger=logger)
@@ -378,11 +397,13 @@ def build_master_audio_and_timeline(
         },
         "audio_scenes": audio_scene_rows,
         "image_items": image_items,
+        "media_items": media_items,
         "subtitle_items": subtitle_items,
+        "bgm_items": [],
     }
 
     out_timeline_path.write_text(json.dumps(timeline, ensure_ascii=False, indent=2), encoding="utf-8")
-    logger(f"[OK] timeline 생성 완료: {out_timeline_path}")
+    logger(f"[OK] timeline build done: {out_timeline_path}")
     return out_timeline_path
 
 
@@ -395,7 +416,6 @@ def build_timeline_service(
     logger=log_print,
     edge_tts_config: Optional[EdgeTTSConfig] = None,
 ) -> Path:
-    """GUI/CLI에서 공통으로 호출하는 타임라인 빌드 서비스 함수"""
     return build_master_audio_and_timeline(
         project_dir=project_dir,
         json_path=json_path,

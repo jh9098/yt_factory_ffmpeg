@@ -1,47 +1,37 @@
-import json
-import math
+﻿import json
 import os
 import shutil
 import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from .constants import (
-    DEFAULT_BG_COLOR,
-    DEFAULT_FADE_SEC,
-    DEFAULT_FONT_SIZE,
-    DEFAULT_FPS,
-    DEFAULT_HEIGHT,
-    DEFAULT_WIDTH,
-)
+from .constants import DEFAULT_BG_COLOR, DEFAULT_FADE_SEC, DEFAULT_FONT_SIZE, DEFAULT_FPS, DEFAULT_HEIGHT, DEFAULT_WIDTH
 from .ffmpeg_tools import ffprobe_duration_sec, run_cmd, which_ffmpeg
 from .utils import ensure_dir, log_print, normalize_motion_name, safe_float, safe_int
 
+
 def ffmpeg_escape_text(s: str) -> str:
-    """
-    drawtext=textfile= 방식에서 사용할 자막 텍스트 정리.
-    실제 특수문자 해석 차단은 drawtext expansion=none 으로 처리한다.
-    """
     if s is None:
         return ""
-
     s = str(s)
-
-    # 줄바꿈 정리
     s = s.replace("\r\n", "\n").replace("\r", "\n")
-
-    # BOM / 널문자 제거
-    s = s.replace("\ufeff", "")
-    s = s.replace("\x00", "")
-
+    s = s.replace("\ufeff", "").replace("\x00", "")
     return s
 
+
+def normalize_subtitle_text(s: str) -> str:
+    if s is None:
+        return ""
+    text = str(s)
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    text = text.replace("\u2028", "\n").replace("\u2029", "\n")
+    # Handle timeline entries that saved escaped newline text.
+    text = text.replace("\\n", "\n")
+    text = text.replace("\ufeff", "").replace("\x00", "")
+    return text
+
+
 def ffmpeg_escape_path_for_filter(p: Path) -> str:
-    """
-    FFmpeg filter(drawtext 등) 안에서 사용할 파일 경로 escape
-    - Windows 드라이브 문자 D: 의 콜론도 반드시 이스케이프
-    - 백슬래시는 슬래시로 통일
-    """
     s = str(p).replace("\\", "/")
     s = s.replace(":", r"\:")
     s = s.replace("'", r"\'")
@@ -51,21 +41,14 @@ def ffmpeg_escape_path_for_filter(p: Path) -> str:
     s = s.replace(";", r"\;")
     return s
 
-def build_zoompan_expr(
-    motion: str,
-    duration: float,
-    fps: int,
-    out_w: int,
-    out_h: int,
-    intensity: float = 0.06
-) -> str:
+
+def build_zoompan_expr(motion: str, duration: float, fps: int, out_w: int, out_h: int, intensity: float = 0.06) -> str:
     motion = normalize_motion_name(motion)
     frames = max(1, int(round(duration * fps)))
 
     z0 = 1.0
     z1 = 1.0 + max(0.0, intensity)
-
-    t_expr = "0" if frames <= 1 else f"(on/{frames-1})"
+    t_expr = "0" if frames <= 1 else f"(on/{frames - 1})"
     ease = f"(0.5*(1-cos(PI*{t_expr})))"
 
     if motion == "zoom-in":
@@ -99,53 +82,16 @@ def build_zoompan_expr(
 
     return f"zoompan=z='{z_expr}':d={frames}:x='{x_expr}':y='{y_expr}':s={out_w}x{out_h}:fps={fps}"
 
-def parse_hex_color(s: str, default=(255, 255, 255)) -> Tuple[int, int, int]:
-    if not s:
-        return default
-    s = s.strip().lstrip("#")
-    if len(s) == 6:
-        try:
-            return int(s[0:2], 16), int(s[2:4], 16), int(s[4:6], 16)
-        except Exception:
-            return default
-    return default
-
-def position_to_xy(pos: str, width: int, height: int, text_w: int, text_h: int, x_offset: int = 0, y_offset: int = 0) -> Tuple[int, int]:
-    pos = (pos or "").strip().lower()
-    if pos == "top":
-        x = (width - text_w) // 2
-        y = int(height * 0.08)
-    elif pos == "bottom":
-        x = (width - text_w) // 2
-        y = int(height * 0.82)
-    elif pos == "center":
-        x = (width - text_w) // 2
-        y = (height - text_h) // 2
-    elif pos == "left-top":
-        x = int(width * 0.06)
-        y = int(height * 0.08)
-    elif pos == "right-top":
-        x = int(width * 0.94 - text_w)
-        y = int(height * 0.08)
-    else:
-        x = (width - text_w) // 2
-        y = int(height * 0.82)
-
-    return x + x_offset, y + y_offset
 
 def resolve_font_path(font_path_str: str) -> Optional[Path]:
-    """
-    사용자가 지정한 폰트가 없을 때 Windows 기본 한글 폰트로 자동 대체
-    """
     candidates: List[Path] = []
-
     if font_path_str:
         candidates.append(Path(font_path_str))
 
     if os.name == "nt":
         win_font_dir = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts"
         candidates += [
-            win_font_dir / "malgun.ttf",          # 맑은 고딕
+            win_font_dir / "malgun.ttf",
             win_font_dir / "malgunbd.ttf",
             win_font_dir / "gulim.ttc",
             win_font_dir / "batang.ttc",
@@ -154,19 +100,14 @@ def resolve_font_path(font_path_str: str) -> Optional[Path]:
 
     for p in candidates:
         try:
-            if p and p.exists() and p.is_file():
+            if p.exists() and p.is_file():
                 return p
         except Exception:
             pass
-
     return None
 
 
 def prepare_filter_asset_dir(output_path: Path) -> Path:
-    """
-    drawtext(fontfile/textfile)에서 한글 경로 인코딩 이슈를 피하기 위해
-    가능한 한 ASCII 기반 임시 경로를 우선 사용한다.
-    """
     candidates: List[Path] = []
 
     if os.name == "nt":
@@ -189,57 +130,102 @@ def prepare_filter_asset_dir(output_path: Path) -> Path:
     fallback.mkdir(parents=True, exist_ok=True)
     return fallback
 
-def render_timeline_to_video(
-    timeline_path: Path,
-    output_path: Path,
-    logger=log_print
-) -> Path:
+
+def _is_video_item(item: Dict[str, Any]) -> bool:
+    kind = str(item.get("type", "")).strip().lower()
+    if kind == "video":
+        return True
+    if kind == "image":
+        return False
+    ext = Path(str(item.get("path", ""))).suffix.lower()
+    return ext in {".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v"}
+
+
+def _to_media_items(data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    media_items = list(data.get("media_items", []))
+    if media_items:
+        return media_items
+
+    # Backward compatibility with old schema.
+    legacy = []
+    for idx, item in enumerate(data.get("image_items", []), start=1):
+        copied = dict(item)
+        copied["id"] = copied.get("id") or f"media_{idx}"
+        copied["type"] = "image"
+        copied["clip_in_sec"] = safe_float(copied.get("clip_in_sec", 0.0), 0.0)
+        duration = max(0.0, safe_float(copied.get("end_sec", 0.0), 0.0) - safe_float(copied.get("start_sec", 0.0), 0.0))
+        copied["clip_out_sec"] = safe_float(copied.get("clip_out_sec", duration), duration)
+        legacy.append(copied)
+    return legacy
+
+
+def _build_source_scaler(input_label: str, out_label: str, width: int, height: int, scale_mode: str) -> str:
+    if scale_mode == "contain":
+        return (
+            f"[{input_label}]scale={width}:{height}:force_original_aspect_ratio=decrease,"
+            f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black,setsar=1[{out_label}]"
+        )
+
+    up_w = int(width * 1.6)
+    up_h = int(height * 1.6)
+    return (
+        f"[{input_label}]scale={up_w}:{up_h}:force_original_aspect_ratio=increase,"
+        f"crop={width}:{height},setsar=1[{out_label}]"
+    )
+
+
+def render_timeline_to_video(timeline_path: Path, output_path: Path, logger=log_print) -> Path:
     data = json.loads(timeline_path.read_text(encoding="utf-8"))
     meta = data["meta"]
-    image_items = list(data.get("image_items", []))
     subtitle_items = list(data.get("subtitle_items", []))
+    media_items = _to_media_items(data)
+    bgm_items = list(data.get("bgm_items", []))
 
     master_audio = Path(meta["master_audio_path"])
     if not master_audio.exists():
-        raise FileNotFoundError(f"master_audio 없음: {master_audio}")
+        raise FileNotFoundError(f"master_audio not found: {master_audio}")
 
     raw_font_path = str(meta.get("font_path", "")).strip()
     resolved_font = resolve_font_path(raw_font_path)
     if resolved_font is None:
-        raise FileNotFoundError(
-            "사용 가능한 폰트를 찾지 못했습니다.\n"
-            f"지정 경로: {raw_font_path}\n"
-            "메타 탭에서 폰트를 직접 지정하거나, Windows 기본 폰트(맑은 고딕)가 있는지 확인하세요."
-        )
+        raise FileNotFoundError(f"font not found: {raw_font_path}")
 
     width = int(meta.get("width", DEFAULT_WIDTH))
     height = int(meta.get("height", DEFAULT_HEIGHT))
     fps = int(meta.get("fps", DEFAULT_FPS))
     bg_color = meta.get("bg_color", DEFAULT_BG_COLOR)
     total_dur = safe_float(meta.get("duration_sec", 0))
-
     if total_dur <= 0:
         total_dur = ffprobe_duration_sec(master_audio, logger=logger)
 
     ensure_dir(output_path.parent)
 
-    sorted_images = sorted(
-        image_items,
-        key=lambda x: (safe_int(x.get("layer", 1), 1), safe_float(x.get("start_sec", 0)))
-    )
+    sorted_media = sorted(media_items, key=lambda x: (safe_int(x.get("layer", 1), 1), safe_float(x.get("start_sec", 0))))
 
-    unique_image_paths: List[Path] = []
-    path_to_input_idx: Dict[str, int] = {}
-
+    source_map: Dict[Tuple[str, str], int] = {}
+    source_list: List[Tuple[str, str]] = []
     next_input_idx = 1
-    for item in sorted_images:
-        p = Path(item["path"])
+
+    for item in sorted_media:
+        p = Path(str(item.get("path", "")))
         if not p.exists():
-            raise FileNotFoundError(f"이미지 없음: {p}")
+            raise FileNotFoundError(f"media source not found: {p}")
+        key = (str(p), "video" if _is_video_item(item) else "image")
+        if key not in source_map:
+            source_map[key] = next_input_idx
+            source_list.append(key)
+            next_input_idx += 1
+
+    bgm_source_map: Dict[str, int] = {}
+    bgm_source_list: List[str] = []
+    for item in bgm_items:
+        p = Path(str(item.get("path", "")))
+        if not p.exists():
+            raise FileNotFoundError(f"bgm source not found: {p}")
         sp = str(p)
-        if sp not in path_to_input_idx:
-            path_to_input_idx[sp] = next_input_idx
-            unique_image_paths.append(p)
+        if sp not in bgm_source_map:
+            bgm_source_map[sp] = next_input_idx
+            bgm_source_list.append(sp)
             next_input_idx += 1
 
     temp_text_dir = prepare_filter_asset_dir(output_path)
@@ -248,16 +234,14 @@ def render_timeline_to_video(
     temp_font_path = temp_text_dir / f"font_{os.getpid()}.ttf"
     shutil.copy2(resolved_font, temp_font_path)
 
-    filter_parts: List[str] = []
-    filter_parts.append(
-        f"color=c={bg_color}:s={width}x{height}:r={fps}:d={total_dur}[base0]"
-    )
-
+    filter_parts: List[str] = [f"color=c={bg_color}:s={width}x{height}:r={fps}:d={total_dur}[base0]"]
     prev_label = "base0"
 
-    for i, item in enumerate(sorted_images, start=1):
-        path = str(item["path"])
-        input_idx = path_to_input_idx[path]
+    for i, item in enumerate(sorted_media, start=1):
+        path = str(item.get("path", ""))
+        kind = "video" if _is_video_item(item) else "image"
+        input_idx = source_map[(path, kind)]
+
         start = safe_float(item.get("start_sec"), 0.0)
         end = safe_float(item.get("end_sec"), 0.0)
         if end <= start:
@@ -266,51 +250,40 @@ def render_timeline_to_video(
         dur = end - start
         fade_in = max(0.0, min(safe_float(item.get("fade_in_sec"), DEFAULT_FADE_SEC), dur / 2))
         fade_out = max(0.0, min(safe_float(item.get("fade_out_sec"), DEFAULT_FADE_SEC), dur / 2))
-        motion = normalize_motion_name(item.get("motion", "hold"))
-        motion_strength = max(0.0, min(safe_float(item.get("motion_strength", 0.06), 0.06), 0.25))
         scale_mode = str(item.get("scale_mode", "cover")).strip().lower()
         x = safe_int(item.get("x", 0))
         y = safe_int(item.get("y", 0))
 
-        src_label = f"imgsrc{i}"
-        mov_label = f"imgmv{i}"
-        fade_label = f"imgfd{i}"
-        timed_label = f"imgtm{i}"
+        src_label = f"src{i}"
+        scaled_label = f"scaled{i}"
+        mov_label = f"mov{i}"
+        fade_label = f"fade{i}"
+        timed_label = f"timed{i}"
         out_label = f"v{i}"
 
-        if scale_mode == "contain":
-            pre_scale = (
-                f"[{input_idx}:v]"
-                f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
-                f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black,"
-                f"setsar=1"
-                f"[{src_label}]"
+        if kind == "image":
+            filter_parts.append(f"[{input_idx}:v]format=rgba[{src_label}]")
+            filter_parts.append(_build_source_scaler(src_label, scaled_label, width, height, scale_mode))
+            motion = normalize_motion_name(item.get("motion", "hold"))
+            motion_strength = max(0.0, min(safe_float(item.get("motion_strength", 0.06), 0.06), 0.25))
+            zp = build_zoompan_expr(motion=motion, duration=dur, fps=fps, out_w=width, out_h=height, intensity=motion_strength)
+            filter_parts.append(
+                f"[{scaled_label}]{zp},trim=duration={dur},setpts=PTS-STARTPTS,format=rgba[{mov_label}]"
             )
         else:
-            up_w = int(width * 1.6)
-            up_h = int(height * 1.6)
-            pre_scale = (
-                f"[{input_idx}:v]"
-                f"scale={up_w}:{up_h}:force_original_aspect_ratio=increase,"
-                f"crop={up_w}:{up_h},"
-                f"setsar=1"
-                f"[{src_label}]"
+            clip_in = max(0.0, safe_float(item.get("clip_in_sec", 0.0), 0.0))
+            clip_out = safe_float(item.get("clip_out_sec", clip_in + dur), clip_in + dur)
+            clip_out = max(clip_in + 0.05, clip_out)
+            if (clip_out - clip_in) < dur:
+                clip_out = clip_in + dur
+
+            filter_parts.append(
+                f"[{input_idx}:v]trim=start={clip_in:.3f}:end={clip_out:.3f},setpts=PTS-STARTPTS,fps={fps}[{src_label}]"
             )
-        filter_parts.append(pre_scale)
-
-        zp = build_zoompan_expr(
-            motion=motion,
-            duration=dur,
-            fps=fps,
-            out_w=width,
-            out_h=height,
-            intensity=motion_strength
-        )
-
-        filter_parts.append(
-            f"[{src_label}]{zp},trim=duration={dur},setpts=PTS-STARTPTS,format=rgba"
-            f"[{mov_label}]"
-        )
+            filter_parts.append(_build_source_scaler(src_label, scaled_label, width, height, scale_mode))
+            filter_parts.append(
+                f"[{scaled_label}]trim=duration={dur:.3f},setpts=PTS-STARTPTS,format=rgba[{mov_label}]"
+            )
 
         fade_chain = f"[{mov_label}]"
         if fade_in > 0:
@@ -320,43 +293,23 @@ def render_timeline_to_video(
         fade_chain += f"format=rgba[{fade_label}]"
         filter_parts.append(fade_chain)
 
-        filter_parts.append(
-            f"[{fade_label}]setpts=PTS+{start}/TB[{timed_label}]"
-        )
-
+        filter_parts.append(f"[{fade_label}]setpts=PTS+{start}/TB[{timed_label}]")
         overlay_enable = f"between(t,{start:.3f},{end:.3f})"
-        overlay = (
-            f"[{prev_label}][{timed_label}]"
-            f"overlay=x={x}:y={y}:format=auto:shortest=0:eof_action=pass:repeatlast=0:enable='{overlay_enable}'"
-            f"[{out_label}]"
+        filter_parts.append(
+            f"[{prev_label}][{timed_label}]overlay=x={x}:y={y}:format=auto:shortest=0:eof_action=pass:repeatlast=0:enable='{overlay_enable}'[{out_label}]"
         )
-        filter_parts.append(overlay)
         prev_label = out_label
 
     current_label = prev_label
     fontfile_escaped = ffmpeg_escape_path_for_filter(temp_font_path)
 
-    sorted_subs = sorted(
-        subtitle_items,
-        key=lambda x: (safe_int(x.get("layer", 1), 1), safe_float(x.get("start_sec", 0)))
-    )
+    sorted_subs = sorted(subtitle_items, key=lambda x: (safe_int(x.get("layer", 1), 1), safe_float(x.get("start_sec", 0))))
 
     for j, sub in enumerate(sorted_subs, start=1):
-        text = ffmpeg_escape_text(str(sub.get("text", "")).strip())
-
-        # 줄바꿈 문자 정리
-        text = (
-            text.replace("\r\n", "\n")
-                .replace("\r", "\n")
-                .replace("\u2028", "\n")
-                .replace("\u2029", "\n")
-        )
-
-        # FFmpeg drawtext(textfile) 줄바꿈은 \n 문자로 넣어야 함
-        text = text.replace("\n", r"\n")
-
+        text = normalize_subtitle_text(str(sub.get("text", "")).strip())
         if not text:
             continue
+
         start = safe_float(sub.get("start_sec"), 0.0)
         end = safe_float(sub.get("end_sec"), 0.0)
         if end <= start:
@@ -372,7 +325,6 @@ def render_timeline_to_video(
         box = 1 if safe_int(sub.get("box", 0), 0) else 0
         box_color = str(sub.get("box_color", "#000000")).replace("#", "")
         box_alpha = max(0.0, min(safe_float(sub.get("box_alpha", 0.35), 0.35), 1.0))
-
         enable = f"between(t,{start:.3f},{end:.3f})"
 
         if position == "top":
@@ -420,37 +372,76 @@ def render_timeline_to_video(
         filter_parts.append(draw)
         current_label = out_label
 
+    audio_mix_labels: List[str] = []
+    sorted_bgm = sorted(bgm_items, key=lambda x: safe_float(x.get("start_sec", 0.0), 0.0))
+    for k, bgm in enumerate(sorted_bgm, start=1):
+        path = str(bgm.get("path", ""))
+        if not path:
+            continue
+        input_idx = bgm_source_map[path]
+        start = max(0.0, safe_float(bgm.get("start_sec", 0.0), 0.0))
+        end = max(start + 0.01, safe_float(bgm.get("end_sec", start + 0.01), start + 0.01))
+        dur = end - start
+        clip_in = max(0.0, safe_float(bgm.get("clip_in_sec", 0.0), 0.0))
+        clip_out = max(clip_in + 0.01, safe_float(bgm.get("clip_out_sec", clip_in + dur), clip_in + dur))
+        if (clip_out - clip_in) < dur:
+            clip_out = clip_in + dur
+        volume = max(0.0, safe_float(bgm.get("volume", 0.35), 0.35))
+        delay_ms = int(round(start * 1000))
+        label = f"bgma{k}"
+
+        filter_parts.append(
+            f"[{input_idx}:a]atrim=start={clip_in:.3f}:end={clip_out:.3f},"
+            f"asetpts=PTS-STARTPTS,volume={volume:.4f},adelay={delay_ms}|{delay_ms},"
+            f"atrim=duration={total_dur:.3f},aresample=async=1[{label}]"
+        )
+        audio_mix_labels.append(label)
+
+    audio_map_ref = "0:a"
+    if audio_mix_labels:
+        mix_input = "[0:a]" + "".join([f"[{x}]" for x in audio_mix_labels])
+        filter_parts.append(
+            f"{mix_input}amix=inputs={1 + len(audio_mix_labels)}:duration=longest:dropout_transition=2[aout]"
+        )
+        audio_map_ref = "[aout]"
+
     filter_complex = ";".join(filter_parts)
 
-    cmd = [which_ffmpeg(), "-y"]
-    cmd += ["-i", str(master_audio)]
-    for p in unique_image_paths:
-        cmd += ["-loop", "1", "-i", str(p)]
+    cmd = [which_ffmpeg(), "-y", "-i", str(master_audio)]
+    for p, kind in source_list:
+        if kind == "image":
+            cmd += ["-loop", "1", "-i", p]
+        else:
+            cmd += ["-i", p]
+    for p in bgm_source_list:
+        cmd += ["-i", p]
 
     cmd += [
-        "-filter_complex", filter_complex,
-        "-map", f"[{current_label}]",
-        "-map", "0:a",
-        "-r", str(fps),
-        "-t", f"{total_dur:.3f}",
-        "-c:v", "libx264",
-        "-pix_fmt", "yuv420p",
-        "-c:a", "aac",
-        "-b:a", "192k",
-        str(output_path)
+        "-filter_complex",
+        filter_complex,
+        "-map",
+        f"[{current_label}]",
+        "-map",
+        audio_map_ref,
+        "-r",
+        str(fps),
+        "-t",
+        f"{total_dur:.3f}",
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "192k",
+        str(output_path),
     ]
 
     run_cmd(cmd, check=True, logger=logger)
-    logger(f"[OK] 렌더 완료: {output_path}")
+    logger(f"[OK] Render done: {output_path}")
     return output_path
-def render_timeline_service(
-    timeline_path: Path,
-    output_path: Path,
-    logger=log_print
-) -> Path:
-    """GUI/CLI에서 공통으로 호출하는 렌더 서비스 함수"""
-    return render_timeline_to_video(
-        timeline_path=timeline_path,
-        output_path=output_path,
-        logger=logger
-    )
+
+
+def render_timeline_service(timeline_path: Path, output_path: Path, logger=log_print) -> Path:
+    return render_timeline_to_video(timeline_path=timeline_path, output_path=output_path, logger=logger)

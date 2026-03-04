@@ -1,5 +1,4 @@
-# constants.py
-DEFAULT_FPS = 30
+﻿DEFAULT_FPS = 30
 DEFAULT_WIDTH = 1080
 DEFAULT_HEIGHT = 1920
 DEFAULT_BG_COLOR = "black"
@@ -8,8 +7,8 @@ DEFAULT_PREVIEW_W = 270
 DEFAULT_PREVIEW_H = 480
 
 SUPPORTED_IMG_EXTS = [".png", ".jpg", ".jpeg", ".webp"]
-SUPPORTED_VID_EXTS = [".mp4", ".mov", ".avi", ".mkv"] # 동영상 지원 추가
-SUPPORTED_AUD_EXTS =[".wav", ".mp3", ".m4a", ".aac"]
+SUPPORTED_VIDEO_EXTS = [".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v"]
+SUPPORTED_AUD_EXTS = [".wav", ".mp3", ".m4a", ".aac"]
 
 DEFAULT_FONT_SIZE = 54
 DEFAULT_OVERLAY_FONT_SIZE = 52
