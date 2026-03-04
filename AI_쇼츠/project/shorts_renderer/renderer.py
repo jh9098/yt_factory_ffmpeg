@@ -323,7 +323,7 @@ def render_timeline_to_video(
 
         overlay = (
             f"[{prev_label}][{fade_label}]"
-            f"overlay=x={x}:y={y}:format=auto:shortest=0"
+            f"overlay=x={x}:y={y}:format=auto:shortest=0:eof_action=pass"
             f"[{out_label}]"
         )
         filter_parts.append(overlay)
