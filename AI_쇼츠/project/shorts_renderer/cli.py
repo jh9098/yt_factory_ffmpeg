@@ -1,5 +1,6 @@
 import argparse
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from .edge_tts import EdgeTTSConfig
@@ -17,7 +18,7 @@ def _cli_info(message: str) -> str:
 
 def main():
     parser = argparse.ArgumentParser(description="Master Audio Timeline Shorts Editor")
-    parser.add_argument("--base", type=str, default=r"P:\AI_shorts")
+    parser.add_argument("--base", type=str, default=".")
     parser.add_argument("--json", type=str, default=None)
     parser.add_argument("--images-dir", type=str, default=None)
     parser.add_argument("--tts-dir", type=str, default=None)
@@ -44,11 +45,12 @@ def main():
         return
 
     base = Path(args.base)
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     json_path = Path(args.json) if args.json else (base / "data" / "shorts.json")
-    images_dir = Path(args.images_dir) if args.images_dir else (base / "assets" / "images" / "shorts" / "sample")
-    tts_dir = Path(args.tts_dir) if args.tts_dir else (base / "assets" / "audio" / "tts" / "shorts")
+    images_dir = Path(args.images_dir) if args.images_dir else (base / "assets" / "images" / "shorts")
+    tts_dir = Path(args.tts_dir) if args.tts_dir else (base / "assets" / "tts" / "shorts")
     timeline_path = Path(args.timeline) if args.timeline else (base / "data" / "timeline.json")
-    output_path = Path(args.output) if args.output else (base / "output" / "timeline_final.mp4")
+    output_path = Path(args.output) if args.output else (base / "output" / f"{stamp}.mp4")
 
     try:
         if not args.render_only:

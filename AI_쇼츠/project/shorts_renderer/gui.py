@@ -7,6 +7,7 @@ import subprocess
 import sys
 import threading
 import traceback
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -53,7 +54,7 @@ class TimelineEditorGUI:
         self.worker_thread: Optional[threading.Thread] = None
         self.is_running = False
 
-        self.base_var = tk.StringVar(value=r"P:\AI_shorts")
+        self.base_var = tk.StringVar(value="")
         self.json_var = tk.StringVar(value="")
         self.images_var = tk.StringVar(value="")
         self.tts_var = tk.StringVar(value="")
@@ -481,21 +482,34 @@ class TimelineEditorGUI:
     # 기본 경로
     # -------------------------------------------------
 
-    def _refresh_defaults_from_base(self):
-        base = Path(self.base_var.get().strip() or ".")
-        default_json = base / "data" / "shorts.json"
-        default_images = base / "assets" / "images" / "shorts"
-        default_tts = base / "assets" / "audio" / "tts" / "shorts"
-        default_font = base / "assets" / "fonts" / "KoddiUDOnGothic-ExtraBold.ttf"
-        default_timeline = base / "data" / "timeline.json"
-        default_output = base / "output" / "timeline_final.mp4"
+    def _get_base_path(self) -> Path:
+        return Path(self.base_var.get().strip() or ".")
 
-        if default_json.exists():
-            self.json_var.set(str(default_json))
-        if default_images.exists():
-            self.images_var.set(str(default_images))
-        if default_tts.exists():
-            self.tts_var.set(str(default_tts))
+    def _get_data_dir(self) -> Path:
+        return self._get_base_path() / "data"
+
+    def _get_images_dir(self) -> Path:
+        return self._get_base_path() / "assets" / "images" / "shorts"
+
+    def _get_tts_dir(self) -> Path:
+        return self._get_base_path() / "assets" / "tts" / "shorts"
+
+    def _default_output_path(self) -> Path:
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        return self._get_base_path() / "output" / f"{stamp}.mp4"
+
+    def _refresh_defaults_from_base(self):
+        base = self._get_base_path()
+        default_json = self._get_data_dir() / "shorts.json"
+        default_images = self._get_images_dir()
+        default_tts = self._get_tts_dir()
+        default_font = base / "assets" / "fonts" / "KoddiUDOnGothic-ExtraBold.ttf"
+        default_timeline = self._get_data_dir() / "timeline.json"
+        default_output = self._default_output_path()
+
+        self.json_var.set(str(default_json))
+        self.images_var.set(str(default_images))
+        self.tts_var.set(str(default_tts))
         if default_font.exists():
             self.font_var.set(str(default_font))
         self.timeline_var.set(str(default_timeline))
@@ -514,20 +528,21 @@ class TimelineEditorGUI:
             self._refresh_defaults_from_base()
 
     def _pick_json(self):
-        base = Path(self.base_var.get().strip() or ".")
-        p = filedialog.askopenfilename(title="JSON 선택", initialdir=str(base), filetypes=[("JSON", "*.json"), ("All", "*.*")])
+        p = filedialog.askopenfilename(
+            title="JSON 선택",
+            initialdir=str(self._get_data_dir()),
+            filetypes=[("JSON", "*.json"), ("All", "*.*")],
+        )
         if p:
             self.json_var.set(p)
 
     def _pick_images(self):
-        base = Path(self.base_var.get().strip() or ".")
-        p = filedialog.askdirectory(title="이미지 폴더 선택", initialdir=str(base))
+        p = filedialog.askdirectory(title="이미지 폴더 선택", initialdir=str(self._get_images_dir()))
         if p:
             self.images_var.set(p)
 
     def _pick_tts(self):
-        base = Path(self.base_var.get().strip() or ".")
-        p = filedialog.askdirectory(title="TTS 폴더 선택", initialdir=str(base))
+        p = filedialog.askdirectory(title="TTS 폴더 선택", initialdir=str(self._get_tts_dir()))
         if p:
             self.tts_var.set(p)
 
@@ -538,8 +553,14 @@ class TimelineEditorGUI:
             self.timeline_var.set(p)
 
     def _pick_output(self):
-        base = Path(self.base_var.get().strip() or ".")
-        p = filedialog.asksaveasfilename(title="출력 mp4 저장", initialdir=str(base), defaultextension=".mp4", filetypes=[("MP4", "*.mp4")])
+        default_output = self._default_output_path()
+        p = filedialog.asksaveasfilename(
+            title="출력 mp4 저장",
+            initialdir=str(default_output.parent),
+            initialfile=default_output.name,
+            defaultextension=".mp4",
+            filetypes=[("MP4", "*.mp4")],
+        )
         if p:
             self.output_var.set(p)
 
