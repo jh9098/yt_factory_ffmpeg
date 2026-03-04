@@ -302,6 +302,10 @@ def build_master_audio_and_timeline(
             "x": 0,
             "y": 0,
             "scale_mode": "cover",
+            "crop_x": 0.0,
+            "crop_y": 0.0,
+            "crop_w": 1.0,
+            "crop_h": 1.0,
             "track": "video",
         }
         image_items.append(image_item)

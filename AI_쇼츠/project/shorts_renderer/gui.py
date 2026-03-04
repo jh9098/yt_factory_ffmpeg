@@ -34,6 +34,7 @@ except ImportError:
     raise SystemExit("Pillow is required. Install with: pip install pillow")
 
 from .constants import DEFAULT_BG_COLOR, DEFAULT_FADE_SEC, DEFAULT_FONT_SIZE, DEFAULT_FPS, DEFAULT_PREVIEW_H, DEFAULT_PREVIEW_W, DEFAULT_WIDTH, DEFAULT_HEIGHT
+from .media_transform import normalized_crop
 from .edge_tts import EdgeTTSConfig
 from .renderer import render_timeline_service
 from .timeline_builder import build_timeline_service
@@ -264,6 +265,13 @@ class TimelineEditorGUI:
         self.clip_clipout_var = tk.StringVar(value="0")
         self.clip_layer_var = tk.StringVar(value="1")
         self.clip_motion_var = tk.StringVar(value="hold")
+        self.clip_scale_mode_var = tk.StringVar(value="cover")
+        self.clip_x_var = tk.StringVar(value="0")
+        self.clip_y_var = tk.StringVar(value="0")
+        self.clip_crop_x_var = tk.StringVar(value="0.0")
+        self.clip_crop_y_var = tk.StringVar(value="0.0")
+        self.clip_crop_w_var = tk.StringVar(value="1.0")
+        self.clip_crop_h_var = tk.StringVar(value="1.0")
 
         form = self._frame(clip_box)
         form.pack(fill="x", pady=4)
@@ -276,6 +284,13 @@ class TimelineEditorGUI:
             ("ClipOut", self.clip_clipout_var),
             ("Layer", self.clip_layer_var),
             ("Motion", self.clip_motion_var),
+            ("Scale", self.clip_scale_mode_var),
+            ("X", self.clip_x_var),
+            ("Y", self.clip_y_var),
+            ("CropX(0~1)", self.clip_crop_x_var),
+            ("CropY(0~1)", self.clip_crop_y_var),
+            ("CropW(0~1)", self.clip_crop_w_var),
+            ("CropH(0~1)", self.clip_crop_h_var),
         ]
         for i, (n, v) in enumerate(rows):
             self._label(form, n).grid(row=i, column=0, sticky="w", pady=1)
@@ -654,6 +669,13 @@ class TimelineEditorGUI:
         self.clip_clipout_var.set(f"{safe_float(clip.get('clip_out_sec', 0), 0):.3f}")
         self.clip_layer_var.set(str(safe_int(clip.get("layer", 1), 1)))
         self.clip_motion_var.set(str(clip.get("motion", "hold")))
+        self.clip_scale_mode_var.set(str(clip.get("scale_mode", "cover")))
+        self.clip_x_var.set(str(safe_int(clip.get("x", 0), 0)))
+        self.clip_y_var.set(str(safe_int(clip.get("y", 0), 0)))
+        self.clip_crop_x_var.set(f"{safe_float(clip.get('crop_x', 0.0), 0.0):.3f}")
+        self.clip_crop_y_var.set(f"{safe_float(clip.get('crop_y', 0.0), 0.0):.3f}")
+        self.clip_crop_w_var.set(f"{safe_float(clip.get('crop_w', 1.0), 1.0):.3f}")
+        self.clip_crop_h_var.set(f"{safe_float(clip.get('crop_h', 1.0), 1.0):.3f}")
 
     def _fill_bgm_form(self, bgm: Dict[str, Any]):
         self.bgm_path_var.set(str(bgm.get("path", "")))
@@ -688,6 +710,10 @@ class TimelineEditorGUI:
             "x": 0,
             "y": 0,
             "scale_mode": "cover",
+            "crop_x": 0.0,
+            "crop_y": 0.0,
+            "crop_w": 1.0,
+            "crop_h": 1.0,
             "track": "video",
         }
         items.append(item)
@@ -721,6 +747,10 @@ class TimelineEditorGUI:
             "x": 0,
             "y": 0,
             "scale_mode": "cover",
+            "crop_x": 0.0,
+            "crop_y": 0.0,
+            "crop_w": 1.0,
+            "crop_h": 1.0,
             "track": "video",
         }
         items.append(item)
@@ -744,6 +774,13 @@ class TimelineEditorGUI:
         clip["clip_out_sec"] = max(clip["clip_in_sec"] + self.MIN_CLIP_DUR, safe_float(self.clip_clipout_var.get(), clip["clip_in_sec"] + 1.0))
         clip["layer"] = max(1, safe_int(self.clip_layer_var.get(), 1))
         clip["motion"] = self.clip_motion_var.get().strip() or "hold"
+        clip["scale_mode"] = (self.clip_scale_mode_var.get().strip() or "cover").lower()
+        clip["x"] = safe_int(self.clip_x_var.get(), 0)
+        clip["y"] = safe_int(self.clip_y_var.get(), 0)
+        clip["crop_x"] = safe_float(self.clip_crop_x_var.get(), 0.0)
+        clip["crop_y"] = safe_float(self.clip_crop_y_var.get(), 0.0)
+        clip["crop_w"] = safe_float(self.clip_crop_w_var.get(), 1.0)
+        clip["crop_h"] = safe_float(self.clip_crop_h_var.get(), 1.0)
         clip["track"] = "video"
         self._normalize_total()
         self._draw_timeline()
@@ -1004,6 +1041,63 @@ class TimelineEditorGUI:
         out.sort(key=lambda x: safe_int(x.get("layer", 1), 1))
         return out
 
+    def _compute_subtitle_y(self, position: str, text_h: int, y_offset: int) -> int:
+        pos = str(position or "bottom").strip().lower()
+        if pos == "top":
+            return int(DEFAULT_PREVIEW_H * 0.08) + y_offset
+        if pos == "center":
+            return int((DEFAULT_PREVIEW_H - text_h) / 2) + y_offset
+        if pos in {"left-top", "right-top"}:
+            return int(DEFAULT_PREVIEW_H * 0.08) + y_offset
+        return int(DEFAULT_PREVIEW_H * 0.82 - text_h) + y_offset
+
+    def _compute_subtitle_x(self, position: str, text_w: int, x_offset: int) -> int:
+        pos = str(position or "bottom").strip().lower()
+        if pos == "left-top":
+            return int(DEFAULT_PREVIEW_W * 0.06) + x_offset
+        if pos == "right-top":
+            return int(DEFAULT_PREVIEW_W * 0.94 - text_w) + x_offset
+        return int((DEFAULT_PREVIEW_W - text_w) / 2) + x_offset
+
+    def _compose_preview_image(self, clip: Dict[str, Any]) -> Image.Image:
+        canvas_img = Image.new("RGB", (DEFAULT_PREVIEW_W, DEFAULT_PREVIEW_H), "black")
+        img = Image.open(str(clip.get("path", ""))).convert("RGB")
+
+        cx, cy, cw, ch = normalized_crop(clip)
+        crop_left = int(round(img.width * cx))
+        crop_top = int(round(img.height * cy))
+        crop_w = max(1, int(round(img.width * cw)))
+        crop_h = max(1, int(round(img.height * ch)))
+        crop_right = min(img.width, crop_left + crop_w)
+        crop_bottom = min(img.height, crop_top + crop_h)
+        img = img.crop((crop_left, crop_top, crop_right, crop_bottom))
+
+        scale_mode = str(clip.get("scale_mode", "cover")).strip().lower()
+        if scale_mode == "contain":
+            work = img.copy()
+            work.thumbnail((DEFAULT_PREVIEW_W, DEFAULT_PREVIEW_H), Image.LANCZOS)
+            x = (DEFAULT_PREVIEW_W - work.width) // 2
+            y = (DEFAULT_PREVIEW_H - work.height) // 2
+            canvas_img.paste(work, (x, y))
+        else:
+            ratio = max(DEFAULT_PREVIEW_W / max(1, img.width), DEFAULT_PREVIEW_H / max(1, img.height))
+            new_w = max(1, int(round(img.width * ratio)))
+            new_h = max(1, int(round(img.height * ratio)))
+            work = img.resize((new_w, new_h), Image.LANCZOS)
+            left = max(0, (new_w - DEFAULT_PREVIEW_W) // 2)
+            top = max(0, (new_h - DEFAULT_PREVIEW_H) // 2)
+            work = work.crop((left, top, left + DEFAULT_PREVIEW_W, top + DEFAULT_PREVIEW_H))
+            canvas_img.paste(work, (0, 0))
+
+        x_offset = safe_int(clip.get("x", 0), 0)
+        y_offset = safe_int(clip.get("y", 0), 0)
+        if x_offset or y_offset:
+            shifted = Image.new("RGB", (DEFAULT_PREVIEW_W, DEFAULT_PREVIEW_H), "black")
+            shifted.paste(canvas_img, (x_offset, y_offset))
+            canvas_img = shifted
+
+        return canvas_img
+
     def _refresh_preview(self):
         self.preview_canvas.delete("all")
         if not self.timeline_data:
@@ -1026,13 +1120,7 @@ class TimelineEditorGUI:
 
         if clip and Path(str(clip.get("path", ""))).exists() and not self._is_video(clip):
             try:
-                img = Image.open(str(clip.get("path", ""))).convert("RGB")
-                img.thumbnail((DEFAULT_PREVIEW_W, DEFAULT_PREVIEW_H))
-                canvas_img = Image.new("RGB", (DEFAULT_PREVIEW_W, DEFAULT_PREVIEW_H), "black")
-                x = (DEFAULT_PREVIEW_W - img.width) // 2
-                y = (DEFAULT_PREVIEW_H - img.height) // 2
-                canvas_img.paste(img, (x, y))
-
+                canvas_img = self._compose_preview_image(clip)
                 draw = ImageDraw.Draw(canvas_img)
                 font_path = self.font_var.get().strip()
                 try:
@@ -1042,9 +1130,14 @@ class TimelineEditorGUI:
 
                 for s in subs:
                     txt = str(s.get("text", "")).replace("\\n", "\n").strip()
-                    if txt:
-                        y0 = DEFAULT_PREVIEW_H - 120 if str(s.get("position", "bottom")) == "bottom" else 30
-                        draw.multiline_text((14, y0), txt, fill=(255, 255, 255), font=font, spacing=4)
+                    if not txt:
+                        continue
+                    bbox = draw.multiline_textbbox((0, 0), txt, font=font, spacing=4)
+                    text_w = bbox[2] - bbox[0]
+                    text_h = bbox[3] - bbox[1]
+                    x0 = self._compute_subtitle_x(str(s.get("position", "bottom")), text_w, safe_int(s.get("x_offset", 0), 0))
+                    y0 = self._compute_subtitle_y(str(s.get("position", "bottom")), text_h, safe_int(s.get("y_offset", 0), 0))
+                    draw.multiline_text((x0, y0), txt, fill=(255, 255, 255), font=font, spacing=4)
 
                 self.preview_img_tk = ImageTk.PhotoImage(canvas_img)
                 self.preview_canvas.create_image(DEFAULT_PREVIEW_W // 2, DEFAULT_PREVIEW_H // 2, image=self.preview_img_tk)

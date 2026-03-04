@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from .constants import DEFAULT_BG_COLOR, DEFAULT_FADE_SEC, DEFAULT_FONT_SIZE, DEFAULT_FPS, DEFAULT_HEIGHT, DEFAULT_WIDTH
 from .ffmpeg_tools import ffprobe_duration_sec, run_cmd, which_ffmpeg
+from .media_transform import normalized_crop
 from .utils import ensure_dir, log_print, normalize_motion_name, safe_float, safe_int
 
 
@@ -159,17 +160,22 @@ def _to_media_items(data: Dict[str, Any]) -> List[Dict[str, Any]]:
     return legacy
 
 
-def _build_source_scaler(input_label: str, out_label: str, width: int, height: int, scale_mode: str) -> str:
+def _build_source_scaler(input_label: str, out_label: str, width: int, height: int, scale_mode: str, item: Dict[str, Any]) -> str:
+    crop_x, crop_y, crop_w, crop_h = normalized_crop(item)
+    crop_expr = (
+        f"crop=w='iw*{crop_w:.6f}':h='ih*{crop_h:.6f}':"
+        f"x='iw*{crop_x:.6f}':y='ih*{crop_y:.6f}',"
+    )
     if scale_mode == "contain":
         return (
-            f"[{input_label}]scale={width}:{height}:force_original_aspect_ratio=decrease,"
+            f"[{input_label}]{crop_expr}scale={width}:{height}:force_original_aspect_ratio=decrease,"
             f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black,setsar=1[{out_label}]"
         )
 
     up_w = int(width * 1.6)
     up_h = int(height * 1.6)
     return (
-        f"[{input_label}]scale={up_w}:{up_h}:force_original_aspect_ratio=increase,"
+        f"[{input_label}]{crop_expr}scale={up_w}:{up_h}:force_original_aspect_ratio=increase,"
         f"crop={width}:{height},setsar=1[{out_label}]"
     )
 
@@ -263,7 +269,7 @@ def render_timeline_to_video(timeline_path: Path, output_path: Path, logger=log_
 
         if kind == "image":
             filter_parts.append(f"[{input_idx}:v]format=rgba[{src_label}]")
-            filter_parts.append(_build_source_scaler(src_label, scaled_label, width, height, scale_mode))
+            filter_parts.append(_build_source_scaler(src_label, scaled_label, width, height, scale_mode, item))
             motion = normalize_motion_name(item.get("motion", "hold"))
             motion_strength = max(0.0, min(safe_float(item.get("motion_strength", 0.06), 0.06), 0.25))
             zp = build_zoompan_expr(motion=motion, duration=dur, fps=fps, out_w=width, out_h=height, intensity=motion_strength)
@@ -280,7 +286,7 @@ def render_timeline_to_video(timeline_path: Path, output_path: Path, logger=log_
             filter_parts.append(
                 f"[{input_idx}:v]trim=start={clip_in:.3f}:end={clip_out:.3f},setpts=PTS-STARTPTS,fps={fps}[{src_label}]"
             )
-            filter_parts.append(_build_source_scaler(src_label, scaled_label, width, height, scale_mode))
+            filter_parts.append(_build_source_scaler(src_label, scaled_label, width, height, scale_mode, item))
             filter_parts.append(
                 f"[{scaled_label}]trim=duration={dur:.3f},setpts=PTS-STARTPTS,format=rgba[{mov_label}]"
             )
