@@ -29,6 +29,7 @@ from .constants import (
     DEFAULT_PREVIEW_W,
     DEFAULT_WIDTH,
 )
+from .edge_tts import EdgeTTSConfig
 from .renderer import render_timeline_service
 from .timeline_builder import build_timeline_service
 from .utils import ensure_dir, safe_float, safe_int
@@ -63,6 +64,9 @@ class TimelineEditorGUI:
         self.fps_var = tk.StringVar(value=str(DEFAULT_FPS))
         self.font_var = tk.StringVar(value="")
         self.bg_var = tk.StringVar(value="black")
+        self.edge_tts_enabled_var = tk.BooleanVar(value=False)
+        self.edge_tts_overwrite_var = tk.BooleanVar(value=False)
+        self.edge_voice_var = tk.StringVar(value="ko-KR-SunHiNeural")
 
         self.playhead_var = tk.DoubleVar(value=0.0)
         self.duration_var = tk.StringVar(value="0.000")
@@ -158,8 +162,15 @@ class TimelineEditorGUI:
         ttk.Entry(opt, textvariable=self.bg_var, width=10).pack(side="left", padx=(4, 12))
         ttk.Button(opt, text="기본경로", command=self._refresh_defaults_from_base).pack(side="left", padx=4)
 
+        edge_opt = ttk.Frame(top)
+        edge_opt.grid(row=7, column=1, sticky="w", pady=(2, 2))
+        ttk.Checkbutton(edge_opt, text="EdgeTTS 자동 생성", variable=self.edge_tts_enabled_var).pack(side="left")
+        ttk.Checkbutton(edge_opt, text="기존 TTS 덮어쓰기", variable=self.edge_tts_overwrite_var).pack(side="left", padx=(8, 12))
+        ttk.Label(edge_opt, text="Voice").pack(side="left")
+        ttk.Entry(edge_opt, textvariable=self.edge_voice_var, width=24).pack(side="left", padx=(4, 8))
+
         btn = ttk.Frame(top)
-        btn.grid(row=7, column=1, sticky="w", pady=(4, 6))
+        btn.grid(row=8, column=1, sticky="w", pady=(4, 6))
         self.btn_build = ttk.Button(btn, text="1) 타임라인 생성", command=self._start_build_timeline)
         self.btn_build.pack(side="left")
         self.btn_load = ttk.Button(btn, text="2) 타임라인 불러오기", command=self._load_timeline_from_file)
@@ -569,8 +580,12 @@ class TimelineEditorGUI:
             self._show_gui_error(f"이미지 폴더 없음 | {images}")
             return False, None, None, None, None, None
         if not tts.exists():
-            self._show_gui_error(f"TTS 폴더 없음 | {tts}")
-            return False, None, None, None, None, None
+            if self.edge_tts_enabled_var.get():
+                ensure_dir(tts)
+                self._log(f"[INFO] TTS 폴더가 없어 자동 생성했습니다: {tts}")
+            else:
+                self._show_gui_error(f"TTS 폴더 없음 | {tts}")
+                return False, None, None, None, None, None
 
         return True, base, json_path, images, tts, timeline
 
@@ -592,7 +607,12 @@ class TimelineEditorGUI:
                     images_dir=images,  # type: ignore[arg-type]
                     tts_dir=tts,  # type: ignore[arg-type]
                     out_timeline_path=timeline,  # type: ignore[arg-type]
-                    logger=logger
+                    logger=logger,
+                    edge_tts_config=EdgeTTSConfig(
+                        enabled=self.edge_tts_enabled_var.get(),
+                        overwrite=self.edge_tts_overwrite_var.get(),
+                        voice=self.edge_voice_var.get().strip() or "ko-KR-SunHiNeural",
+                    ),
                 )
                 self.ui_queue.put(("log", f"[OK] 타임라인 생성: {tl}"))
                 self.ui_queue.put(("done", {"title": "완료", "message": f"타임라인 생성 완료\n{tl}"}))
