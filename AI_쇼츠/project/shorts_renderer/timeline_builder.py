@@ -19,6 +19,7 @@ from .ffmpeg_tools import (
     ffprobe_duration_sec,
     normalize_audio_to_wav,
 )
+from .edge_tts import EdgeTTSConfig, synthesize_text_to_file
 from .utils import ensure_dir, log_print, normalize_motion_name, safe_float, sanitize_folder_name
 
 def scene_id_candidates(scene_id: str, idx: int) -> List[str]:
@@ -139,13 +140,66 @@ def find_tts_for_scene(tts_selected_dir: Path, images_dir: Path, scene_id: str, 
         return p
     return None
 
+
+def _scene_tts_text(scene: Dict[str, Any]) -> str:
+    candidates = [
+        scene.get("tts_text"),
+        scene.get("voice_text"),
+        scene.get("narration_text"),
+    ]
+    for text in candidates:
+        if isinstance(text, str) and text.strip():
+            return text.strip()
+
+    subtitle_lines = scene.get("subtitle_lines")
+    if isinstance(subtitle_lines, list):
+        merged = " ".join([str(x).strip() for x in subtitle_lines if str(x).strip()]).strip()
+        if merged:
+            return merged
+
+    return ""
+
+
+def _auto_generate_edge_tts_if_needed(
+    scenes: List[Dict[str, Any]],
+    tts_dir: Path,
+    images_dir: Path,
+    edge_tts_config: EdgeTTSConfig,
+    logger=log_print,
+) -> None:
+    if not edge_tts_config.enabled:
+        return
+
+    job_tts_dir, _ = resolve_tts_dirs(tts_dir, images_dir)
+    ensure_dir(job_tts_dir)
+
+    for i, scene in enumerate(scenes, start=1):
+        scene_id = str(scene.get("scene_id", i))
+        existing_audio = find_tts_for_scene(tts_dir, images_dir, scene_id, i)
+
+        if existing_audio and not edge_tts_config.overwrite:
+            logger(f"[INFO] EdgeTTS 건너뜀(이미 파일 있음): scene_id={scene_id} | {existing_audio}")
+            continue
+
+        if existing_audio and edge_tts_config.overwrite:
+            out_path = existing_audio
+        else:
+            out_path = job_tts_dir / f"{scene_id}.mp3"
+
+        tts_text = _scene_tts_text(scene)
+        if not tts_text:
+            raise ValueError(f"EdgeTTS 텍스트 누락: scene_id={scene_id} (tts_text 또는 subtitle_lines 필요)")
+
+        synthesize_text_to_file(tts_text, out_path, edge_tts_config, logger=logger)
+
 def build_master_audio_and_timeline(
     project_dir: Path,
     json_path: Path,
     images_dir: Path,
     tts_dir: Path,
     out_timeline_path: Path,
-    logger=log_print
+    logger=log_print,
+    edge_tts_config: Optional[EdgeTTSConfig] = None,
 ) -> Path:
     data = load_json_schema_compliant(json_path)
     scenes = data["scenes"]
@@ -163,6 +217,15 @@ def build_master_audio_and_timeline(
     cur = 0.0
     image_items: List[Dict[str, Any]] = []
     subtitle_items: List[Dict[str, Any]] = []
+
+    if edge_tts_config and edge_tts_config.enabled:
+        _auto_generate_edge_tts_if_needed(
+            scenes=scenes,
+            tts_dir=tts_dir,
+            images_dir=images_dir,
+            edge_tts_config=edge_tts_config,
+            logger=logger,
+        )
 
     # tts 폴더 안 wav 후보 미리 수집
     wav_candidates = sorted(list(tts_dir.glob("*.wav")))
@@ -329,7 +392,8 @@ def build_timeline_service(
     images_dir: Path,
     tts_dir: Path,
     out_timeline_path: Path,
-    logger=log_print
+    logger=log_print,
+    edge_tts_config: Optional[EdgeTTSConfig] = None,
 ) -> Path:
     """GUI/CLI에서 공통으로 호출하는 타임라인 빌드 서비스 함수"""
     return build_master_audio_and_timeline(
@@ -338,5 +402,6 @@ def build_timeline_service(
         images_dir=images_dir,
         tts_dir=tts_dir,
         out_timeline_path=out_timeline_path,
-        logger=logger
+        logger=logger,
+        edge_tts_config=edge_tts_config,
     )
