@@ -390,3 +390,16 @@ def render_timeline_to_video(
     run_cmd(cmd, check=True, logger=logger)
     logger(f"[OK] 렌더 완료: {output_path}")
     return output_path
+
+
+def render_timeline_service(
+    timeline_path: Path,
+    output_path: Path,
+    logger=log_print
+) -> Path:
+    """GUI/CLI에서 공통으로 호출하는 렌더 서비스 함수"""
+    return render_timeline_to_video(
+        timeline_path=timeline_path,
+        output_path=output_path,
+        logger=logger
+    )

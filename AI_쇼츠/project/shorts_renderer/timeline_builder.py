@@ -321,3 +321,22 @@ def build_master_audio_and_timeline(
     out_timeline_path.write_text(json.dumps(timeline, ensure_ascii=False, indent=2), encoding="utf-8")
     logger(f"[OK] timeline 생성 완료: {out_timeline_path}")
     return out_timeline_path
+
+
+def build_timeline_service(
+    project_dir: Path,
+    json_path: Path,
+    images_dir: Path,
+    tts_dir: Path,
+    out_timeline_path: Path,
+    logger=log_print
+) -> Path:
+    """GUI/CLI에서 공통으로 호출하는 타임라인 빌드 서비스 함수"""
+    return build_master_audio_and_timeline(
+        project_dir=project_dir,
+        json_path=json_path,
+        images_dir=images_dir,
+        tts_dir=tts_dir,
+        out_timeline_path=out_timeline_path,
+        logger=logger
+    )
