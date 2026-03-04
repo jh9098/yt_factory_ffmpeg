@@ -33,6 +33,24 @@ def safe_int(v: Any, default: int = 0) -> int:
         return default
 
 
+def normalize_motion_name(motion: str) -> str:
+    m = (motion or "").strip().lower()
+    mapping = {
+        "zoom": "zoom-in",
+        "zoomin": "zoom-in",
+        "zoom-in": "zoom-in",
+        "zoomout": "zoom-out",
+        "zoom-out": "zoom-out",
+        "hold": "hold",
+        "none": "hold",
+        "pan-left": "pan-left",
+        "pan-right": "pan-right",
+        "pan-up": "pan-up",
+        "pan-down": "pan-down",
+    }
+    return mapping.get(m, "hold")
+
+
 def seconds_to_hms(sec: float) -> str:
     if sec < 0:
         sec = 0

@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from .constants import DEFAULT_BG_COLOR, DEFAULT_FADE_SEC, DEFAULT_FPS, DEFAULT_HEIGHT, DEFAULT_WIDTH
 from .ffmpeg_tools import ffprobe_duration_sec, run_cmd, which_ffmpeg
-from .utils import ensure_dir, log_print, safe_float, safe_int
+from .utils import ensure_dir, log_print, normalize_motion_name, safe_float, safe_int
 
 def ffmpeg_escape_text(s: str) -> str:
     """
@@ -33,23 +33,6 @@ def ffmpeg_escape_path_for_filter(p: Path) -> str:
     s = s.replace(",", r"\,")
     s = s.replace(";", r"\;")
     return s
-
-def normalize_motion_name(m: str) -> str:
-    m = (m or "").strip().lower()
-    mapping = {
-        "zoom": "zoom-in",
-        "zoomin": "zoom-in",
-        "zoom-in": "zoom-in",
-        "zoomout": "zoom-out",
-        "zoom-out": "zoom-out",
-        "hold": "hold",
-        "none": "hold",
-        "pan-left": "pan-left",
-        "pan-right": "pan-right",
-        "pan-up": "pan-up",
-        "pan-down": "pan-down",
-    }
-    return mapping.get(m, "hold")
 
 def build_zoompan_expr(
     motion: str,

@@ -19,8 +19,7 @@ from .ffmpeg_tools import (
     ffprobe_duration_sec,
     normalize_audio_to_wav,
 )
-from .renderer import normalize_motion_name
-from .utils import ensure_dir, log_print, safe_float, sanitize_folder_name
+from .utils import ensure_dir, log_print, normalize_motion_name, safe_float, sanitize_folder_name
 
 def scene_id_candidates(scene_id: str, idx: int) -> List[str]:
     s = str(scene_id).strip()
