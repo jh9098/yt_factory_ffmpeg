@@ -19,13 +19,21 @@ from .utils import ensure_dir, log_print, normalize_motion_name, safe_float, saf
 
 def ffmpeg_escape_text(s: str) -> str:
     """
-    textfile 방식으로 바꿀 예정이므로,
-    여기서는 과도한 escape를 하지 않고 줄바꿈만 정리
+    drawtext=textfile= 방식에서 사용할 자막 텍스트 정리.
+    실제 특수문자 해석 차단은 drawtext expansion=none 으로 처리한다.
     """
     if s is None:
         return ""
+
     s = str(s)
+
+    # 줄바꿈 정리
     s = s.replace("\r\n", "\n").replace("\r", "\n")
+
+    # BOM / 널문자 제거
+    s = s.replace("\ufeff", "")
+    s = s.replace("\x00", "")
+
     return s
 
 def ffmpeg_escape_path_for_filter(p: Path) -> str:
@@ -195,9 +203,6 @@ def render_timeline_to_video(
     if not master_audio.exists():
         raise FileNotFoundError(f"master_audio 없음: {master_audio}")
 
-    # -----------------------------
-    # 폰트 자동 대체
-    # -----------------------------
     raw_font_path = str(meta.get("font_path", "")).strip()
     resolved_font = resolve_font_path(raw_font_path)
     if resolved_font is None:
@@ -226,7 +231,6 @@ def render_timeline_to_video(
     unique_image_paths: List[Path] = []
     path_to_input_idx: Dict[str, int] = {}
 
-    # 0번 입력은 master_audio 이므로 이미지 입력은 1부터 시작
     next_input_idx = 1
     for item in sorted_images:
         p = Path(item["path"])
@@ -238,13 +242,9 @@ def render_timeline_to_video(
             unique_image_paths.append(p)
             next_input_idx += 1
 
-    # -----------------------------
-    # drawtext 자산(폰트/텍스트) 임시 저장 폴더
-    # -----------------------------
     temp_text_dir = prepare_filter_asset_dir(output_path)
     ensure_dir(temp_text_dir)
 
-    # Windows + ffmpeg drawtext에서 한글 경로가 들어가면 실패하는 사례 방지
     temp_font_path = temp_text_dir / f"font_{os.getpid()}.ttf"
     shutil.copy2(resolved_font, temp_font_path)
 
@@ -255,12 +255,6 @@ def render_timeline_to_video(
 
     prev_label = "base0"
 
-    # -------------------------------------------------
-    # 이미지 레이어 구성
-    # 핵심 수정:
-    #   fade는 "상대시간(0~dur)" 기준으로 먼저 적용하고
-    #   setpts로 "절대 시작시간(start)" 이동은 그 다음에 한다.
-    # -------------------------------------------------
     for i, item in enumerate(sorted_images, start=1):
         path = str(item["path"])
         input_idx = path_to_input_idx[path]
@@ -313,13 +307,11 @@ def render_timeline_to_video(
             intensity=motion_strength
         )
 
-        # 1) 장면 내부 상대시간(0~dur) 기준 영상 생성
         filter_parts.append(
             f"[{src_label}]{zp},trim=duration={dur},setpts=PTS-STARTPTS,format=rgba"
             f"[{mov_label}]"
         )
 
-        # 2) fade는 상대시간 기준으로 적용
         fade_chain = f"[{mov_label}]"
         if fade_in > 0:
             fade_chain += f"fade=t=in:st=0:d={fade_in}:alpha=1,"
@@ -328,7 +320,6 @@ def render_timeline_to_video(
         fade_chain += f"format=rgba[{fade_label}]"
         filter_parts.append(fade_chain)
 
-        # 3) fade 적용이 끝난 뒤, 그제서야 타임라인 절대 시간(start)으로 이동
         filter_parts.append(
             f"[{fade_label}]setpts=PTS+{start}/TB[{timed_label}]"
         )
@@ -345,9 +336,6 @@ def render_timeline_to_video(
     current_label = prev_label
     fontfile_escaped = ffmpeg_escape_path_for_filter(temp_font_path)
 
-    # -------------------------------------------------
-    # 자막 / 오버레이 drawtext
-    # -------------------------------------------------
     sorted_subs = sorted(
         subtitle_items,
         key=lambda x: (safe_int(x.get("layer", 1), 1), safe_float(x.get("start_sec", 0)))
@@ -355,9 +343,20 @@ def render_timeline_to_video(
 
     for j, sub in enumerate(sorted_subs, start=1):
         text = ffmpeg_escape_text(str(sub.get("text", "")).strip())
+
+        # 줄바꿈 문자 정리
+        text = (
+            text.replace("\r\n", "\n")
+                .replace("\r", "\n")
+                .replace("\u2028", "\n")
+                .replace("\u2029", "\n")
+        )
+
+        # FFmpeg drawtext(textfile) 줄바꿈은 \n 문자로 넣어야 함
+        text = text.replace("\n", r"\n")
+
         if not text:
             continue
-
         start = safe_float(sub.get("start_sec"), 0.0)
         end = safe_float(sub.get("end_sec"), 0.0)
         if end <= start:
@@ -393,7 +392,8 @@ def render_timeline_to_video(
             y_expr = f"h*0.82+{y_offset}"
 
         txt_file = temp_text_dir / f"subtitle_{j:03d}.txt"
-        txt_file.write_text(text, encoding="utf-8")
+        with open(txt_file, "w", encoding="utf-8", newline="\n") as f:
+            f.write(text)
         txt_file_escaped = ffmpeg_escape_path_for_filter(txt_file)
 
         draw = (
@@ -401,13 +401,14 @@ def render_timeline_to_video(
             f"fontfile='{fontfile_escaped}':"
             f"textfile='{txt_file_escaped}':"
             f"reload=0:"
+            f"expansion=none:"
             f"fontsize={font_size}:"
             f"fontcolor={font_color}:"
             f"borderw={border_w}:"
             f"bordercolor={border_color}:"
             f"x={x_expr}:"
             f"y={y_expr}:"
-            f"line_spacing=8:"
+            f"line_spacing=14:"
             f"enable='{enable}'"
         )
 
