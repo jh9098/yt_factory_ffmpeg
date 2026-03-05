@@ -33,8 +33,9 @@ try:
 except ImportError:
     raise SystemExit("Pillow is required. Install with: pip install pillow")
 
-from .constants import DEFAULT_BG_COLOR, DEFAULT_FADE_SEC, DEFAULT_FONT_SIZE, DEFAULT_FPS, DEFAULT_PREVIEW_H, DEFAULT_PREVIEW_W, DEFAULT_WIDTH, DEFAULT_HEIGHT
+from .constants import DEFAULT_BG_COLOR, DEFAULT_FADE_SEC, DEFAULT_FONT_SIZE, DEFAULT_FPS, DEFAULT_PREVIEW_H, DEFAULT_PREVIEW_W, DEFAULT_SCALE_MODE, DEFAULT_WIDTH, DEFAULT_HEIGHT
 from .media_transform import normalized_crop
+from .scale_mode import normalize_scale_mode, parse_scale_mode_input, to_scale_mode_display
 from .edge_tts import EdgeTTSConfig
 from .renderer import render_timeline_service
 from .timeline_builder import build_timeline_service
@@ -453,7 +454,7 @@ class TimelineEditorGUI:
         self.clip_clipout_var = tk.StringVar(value="0")
         self.clip_layer_var = tk.StringVar(value="1")
         self.clip_motion_var = tk.StringVar(value="hold")
-        self.clip_scale_mode_var = tk.StringVar(value="cover")
+        self.clip_scale_mode_var = tk.StringVar(value=to_scale_mode_display(DEFAULT_SCALE_MODE))
         self.clip_x_var = tk.StringVar(value="0")
         self.clip_y_var = tk.StringVar(value="0")
         self.clip_crop_x_var = tk.StringVar(value="0.0")
@@ -472,7 +473,7 @@ class TimelineEditorGUI:
             ("원본 종료시간", self.clip_clipout_var),
             ("레이어(앞/뒤 순서)", self.clip_layer_var),
             ("모션", self.clip_motion_var),
-            ("크기 맞춤", self.clip_scale_mode_var),
+            ("크기 맞춤(전체 표시/화면 채우기)", self.clip_scale_mode_var),
             ("X", self.clip_x_var),
             ("Y", self.clip_y_var),
             ("자르기 X 비율(0~1)", self.clip_crop_x_var),
@@ -641,6 +642,7 @@ class TimelineEditorGUI:
             cp.setdefault("clip_in_sec", 0.0)
             dur = max(0.0, safe_float(cp.get("end_sec", 0), 0) - safe_float(cp.get("start_sec", 0), 0))
             cp.setdefault("clip_out_sec", dur)
+            cp["scale_mode"] = normalize_scale_mode(cp.get("scale_mode", DEFAULT_SCALE_MODE))
             cp.setdefault("track", "video")
             legacy.append(cp)
         self.timeline_data["media_items"] = legacy
@@ -752,6 +754,8 @@ class TimelineEditorGUI:
         self.duration_var.set(f"/ {total:.3f}s")
 
         _ = self._get_media()
+        for media in self._get_media():
+            media["scale_mode"] = normalize_scale_mode(media.get("scale_mode", DEFAULT_SCALE_MODE))
         _ = self._get_subs()
         _ = self._get_bgm()
 
@@ -861,7 +865,7 @@ class TimelineEditorGUI:
         self.clip_clipout_var.set(f"{safe_float(clip.get('clip_out_sec', 0), 0):.3f}")
         self.clip_layer_var.set(str(safe_int(clip.get("layer", 1), 1)))
         self.clip_motion_var.set(str(clip.get("motion", "hold")))
-        self.clip_scale_mode_var.set(str(clip.get("scale_mode", "cover")))
+        self.clip_scale_mode_var.set(to_scale_mode_display(clip.get("scale_mode", DEFAULT_SCALE_MODE)))
         self.clip_x_var.set(str(safe_int(clip.get("x", 0), 0)))
         self.clip_y_var.set(str(safe_int(clip.get("y", 0), 0)))
         self.clip_crop_x_var.set(f"{safe_float(clip.get('crop_x', 0.0), 0.0):.3f}")
@@ -901,7 +905,7 @@ class TimelineEditorGUI:
             "layer": 1,
             "x": 0,
             "y": 0,
-            "scale_mode": "cover",
+            "scale_mode": DEFAULT_SCALE_MODE,
             "crop_x": 0.0,
             "crop_y": 0.0,
             "crop_w": 1.0,
@@ -938,7 +942,7 @@ class TimelineEditorGUI:
             "layer": 1,
             "x": 0,
             "y": 0,
-            "scale_mode": "cover",
+            "scale_mode": DEFAULT_SCALE_MODE,
             "crop_x": 0.0,
             "crop_y": 0.0,
             "crop_w": 1.0,
@@ -966,7 +970,7 @@ class TimelineEditorGUI:
         clip["clip_out_sec"] = max(clip["clip_in_sec"] + self.MIN_CLIP_DUR, safe_float(self.clip_clipout_var.get(), clip["clip_in_sec"] + 1.0))
         clip["layer"] = max(1, safe_int(self.clip_layer_var.get(), 1))
         clip["motion"] = self.clip_motion_var.get().strip() or "hold"
-        clip["scale_mode"] = (self.clip_scale_mode_var.get().strip() or "cover").lower()
+        clip["scale_mode"] = parse_scale_mode_input(self.clip_scale_mode_var.get())
         clip["x"] = safe_int(self.clip_x_var.get(), 0)
         clip["y"] = safe_int(self.clip_y_var.get(), 0)
         clip["crop_x"] = safe_float(self.clip_crop_x_var.get(), 0.0)
@@ -1264,7 +1268,7 @@ class TimelineEditorGUI:
         crop_bottom = min(img.height, crop_top + crop_h)
         img = img.crop((crop_left, crop_top, crop_right, crop_bottom))
 
-        scale_mode = str(clip.get("scale_mode", "cover")).strip().lower()
+        scale_mode = normalize_scale_mode(clip.get("scale_mode", DEFAULT_SCALE_MODE))
         if scale_mode == "contain":
             work = img.copy()
             work.thumbnail((DEFAULT_PREVIEW_W, DEFAULT_PREVIEW_H), Image.LANCZOS)
