@@ -38,7 +38,7 @@ from .media_transform import normalized_crop
 from .edge_tts import EdgeTTSConfig
 from .renderer import render_timeline_service
 from .timeline_builder import build_timeline_service
-from .ui_theme import BUTTON_KIND, COLORS
+from .ui_theme import BUTTON_KIND, COLORS, TTK_BUTTON_STYLE
 from .ui_tooltip import ToolTip
 from .utils import ensure_dir, safe_float, safe_int
 
@@ -64,6 +64,8 @@ class TimelineEditorGUI:
         if self.use_ctk:
             ctk.set_appearance_mode("dark")
             ctk.set_default_color_theme("dark-blue")
+        else:
+            self._init_ttk_styles()
 
         self.ui_queue: "queue.Queue[Tuple[str, Any]]" = queue.Queue()
         self.worker_thread: Optional[threading.Thread] = None
@@ -93,6 +95,7 @@ class TimelineEditorGUI:
         self.zoom_var = tk.DoubleVar(value=70.0)
         self.snap_enabled_var = tk.BooleanVar(value=True)
         self.current_step_var = tk.IntVar(value=1)
+        self.step_buttons: Dict[int, Any] = {}
 
         self.timeline_data: Optional[Dict[str, Any]] = None
         self.undo_stack: List[Dict[str, Any]] = []
@@ -153,7 +156,42 @@ class TimelineEditorGUI:
                 hover_color=button_kind["hover"],
                 text_color=button_kind["fg"],
             )
-        return ttk.Button(parent, text=text, command=command)
+        ttk_style = TTK_BUTTON_STYLE.get(kind, TTK_BUTTON_STYLE["secondary"])
+        return ttk.Button(parent, text=text, command=command, style=ttk_style)
+
+    def _init_ttk_styles(self):
+        style = ttk.Style(self.root)
+        try:
+            style.theme_use("clam")
+        except Exception:
+            pass
+
+        base_bg = COLORS["canvas_bg"]
+        style.configure("TFrame", background=base_bg)
+        style.configure("TLabel", background=base_bg, foreground=COLORS["list_fg"])
+
+        for kind, ttk_name in TTK_BUTTON_STYLE.items():
+            token = BUTTON_KIND[kind]
+            style.configure(
+                ttk_name,
+                foreground=token["fg"],
+                background=token["bg"],
+                borderwidth=1,
+                focusthickness=2,
+                focuscolor=token["hover"],
+                padding=(8, 5),
+            )
+            style.map(
+                ttk_name,
+                foreground=[("disabled", "#7d8590"), ("active", token["fg"])],
+                background=[
+                    ("disabled", "#1f2632"),
+                    ("pressed", token["hover"]),
+                    ("active", token["hover"]),
+                    ("!disabled", token["bg"]),
+                ],
+                relief=[("pressed", "sunken"), ("!pressed", "raised")],
+            )
 
     def _check(self, parent, text, var):
         if self.use_ctk:
@@ -222,6 +260,44 @@ class TimelineEditorGUI:
         else:
             self.step3_frame.tkraise()
             self.status_var.set("3단계: 출력 경로를 확인하고 렌더를 실행하세요.")
+        self._refresh_stepper_ui()
+
+    def _set_step_status_text(self):
+        step = self.current_step_var.get()
+        if step == 1:
+            self.status_var.set("현재 1단계(소스 연결) · 다음 행동: 입력 경로를 확인한 뒤 2단계로 이동하세요.")
+        elif step == 2:
+            self.status_var.set("현재 2단계(타임라인 편집) · 다음 행동: 타임라인 생성/불러오기 후 저장하세요.")
+        else:
+            self.status_var.set("현재 3단계(렌더) · 다음 행동: 출력 경로를 점검하고 최종 렌더를 시작하세요.")
+
+    def _refresh_stepper_ui(self):
+        can_enter_step2 = self._validate_step1_paths(show_message=False)
+        can_enter_step3 = can_enter_step2 and self.timeline_data is not None
+        enabled_map = {1: True, 2: can_enter_step2, 3: can_enter_step3}
+        current = self.current_step_var.get()
+
+        for step, btn in self.step_buttons.items():
+            if step == current:
+                kind = "primary"
+            elif enabled_map.get(step, False):
+                kind = "secondary"
+            else:
+                kind = "secondary"
+
+            state = "normal" if enabled_map.get(step, False) else "disabled"
+            if self.use_ctk:
+                token = BUTTON_KIND[kind]
+                btn.configure(
+                    fg_color=token["bg"],
+                    hover_color=token["hover"],
+                    text_color=token["fg"],
+                    state=state,
+                )
+            else:
+                btn.configure(style=TTK_BUTTON_STYLE.get(kind, TTK_BUTTON_STYLE["secondary"]), state=state)
+
+        self._set_step_status_text()
 
     def _build_ui(self):
         root = self._frame(self.root)
@@ -230,10 +306,10 @@ class TimelineEditorGUI:
         stepper = self._frame(root)
         stepper.pack(fill="x", pady=(0, 8))
         self._label(stepper, "작업 단계").pack(side="left", padx=(0, 8))
-        self.step_labels: Dict[int, tk.Label] = {}
         for step, name in [(1, "1) 소스 연결"), (2, "2) 타임라인 편집"), (3, "3) 렌더")]:
             btn = self._button(stepper, name, lambda s=step: self._switch_step(s), 130, kind="secondary")
             btn.pack(side="left", padx=3)
+            self.step_buttons[step] = btn
 
         self.step_container = self._frame(root)
         self.step_container.pack(fill="both", expand=True)
@@ -479,7 +555,10 @@ class TimelineEditorGUI:
         state = "disabled" if running else "normal"
         for b in [self.btn_build, self.btn_load, self.btn_save, self.btn_render]:
             b.configure(state=state)
-        self.status_var.set("작업 진행 중..." if running else "Ready")
+        if running:
+            self.status_var.set("작업 진행 중... 완료 후 다음 단계 버튼으로 계속 진행하세요.")
+        else:
+            self._refresh_stepper_ui()
 
     def _drain_ui_queue(self):
         while True:
@@ -685,6 +764,7 @@ class TimelineEditorGUI:
         self._refresh_bgm_list()
         self._draw_timeline()
         self._refresh_preview()
+        self._refresh_stepper_ui()
 
     def _apply_meta(self):
         if not self.timeline_data:

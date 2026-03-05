@@ -18,6 +18,12 @@ BUTTON_KIND = {
     },
 }
 
+TTK_BUTTON_STYLE = {
+    "primary": "Primary.TButton",
+    "secondary": "Secondary.TButton",
+    "danger": "Danger.TButton",
+}
+
 COLORS = {
     "log_bg": "#0d1117",
     "log_fg": "#c9d1d9",
