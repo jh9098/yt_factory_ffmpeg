@@ -5,9 +5,10 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from .constants import DEFAULT_BG_COLOR, DEFAULT_FADE_SEC, DEFAULT_FONT_SIZE, DEFAULT_FPS, DEFAULT_HEIGHT, DEFAULT_WIDTH
+from .constants import DEFAULT_BG_COLOR, DEFAULT_FADE_SEC, DEFAULT_FONT_SIZE, DEFAULT_FPS, DEFAULT_HEIGHT, DEFAULT_SCALE_MODE, DEFAULT_WIDTH
 from .ffmpeg_tools import ffprobe_duration_sec, run_cmd, which_ffmpeg
 from .media_transform import normalized_crop
+from .scale_mode import normalize_scale_mode
 from .utils import ensure_dir, log_print, normalize_motion_name, safe_float, safe_int
 
 
@@ -156,11 +157,13 @@ def _to_media_items(data: Dict[str, Any]) -> List[Dict[str, Any]]:
         copied["clip_in_sec"] = safe_float(copied.get("clip_in_sec", 0.0), 0.0)
         duration = max(0.0, safe_float(copied.get("end_sec", 0.0), 0.0) - safe_float(copied.get("start_sec", 0.0), 0.0))
         copied["clip_out_sec"] = safe_float(copied.get("clip_out_sec", duration), duration)
+        copied["scale_mode"] = normalize_scale_mode(copied.get("scale_mode", DEFAULT_SCALE_MODE))
         legacy.append(copied)
     return legacy
 
 
 def _build_source_scaler(input_label: str, out_label: str, width: int, height: int, scale_mode: str, item: Dict[str, Any]) -> str:
+    scale_mode = normalize_scale_mode(scale_mode)
     crop_x, crop_y, crop_w, crop_h = normalized_crop(item)
     crop_expr = (
         f"crop=w='iw*{crop_w:.6f}':h='ih*{crop_h:.6f}':"
@@ -256,9 +259,16 @@ def render_timeline_to_video(timeline_path: Path, output_path: Path, logger=log_
         dur = end - start
         fade_in = max(0.0, min(safe_float(item.get("fade_in_sec"), DEFAULT_FADE_SEC), dur / 2))
         fade_out = max(0.0, min(safe_float(item.get("fade_out_sec"), DEFAULT_FADE_SEC), dur / 2))
-        scale_mode = str(item.get("scale_mode", "cover")).strip().lower()
+        scale_mode = normalize_scale_mode(item.get("scale_mode", DEFAULT_SCALE_MODE))
         x = safe_int(item.get("x", 0))
         y = safe_int(item.get("y", 0))
+        crop_x, crop_y, crop_w, crop_h = normalized_crop(item)
+
+        logger(
+            "[DEBUG] media_item "
+            f"id={item.get('id', i)} type={kind} scale_mode={scale_mode} "
+            f"crop=({crop_x:.3f},{crop_y:.3f},{crop_w:.3f},{crop_h:.3f})"
+        )
 
         src_label = f"src{i}"
         scaled_label = f"scaled{i}"

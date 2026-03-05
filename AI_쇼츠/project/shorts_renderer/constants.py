@@ -12,3 +12,6 @@ SUPPORTED_AUD_EXTS = [".wav", ".mp3", ".m4a", ".aac"]
 
 DEFAULT_FONT_SIZE = 54
 DEFAULT_OVERLAY_FONT_SIZE = 52
+
+DEFAULT_SCALE_MODE = "contain"
+SCALE_MODE_OPTIONS = ["contain", "cover"]
