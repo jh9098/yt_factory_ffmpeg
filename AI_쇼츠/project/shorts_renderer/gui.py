@@ -1,4 +1,4 @@
-﻿
+
 import copy
 import json
 import os
@@ -41,7 +41,6 @@ from .renderer import render_timeline_service
 from .timeline_builder import build_timeline_service
 from .ui_theme import BUTTON_KIND, COLORS, TTK_BUTTON_STYLE
 from .ui_tooltip import ToolTip
-from .ui_window import set_window_title
 from .utils import ensure_dir, safe_float, safe_int
 
 
@@ -59,7 +58,7 @@ class TimelineEditorGUI:
 
     def __init__(self, root: tk.Tk):
         self.root = root
-        set_window_title(self.root, "AI Shorts Studio")
+        self.root.title("AI Shorts Studio")
         self.root.minsize(1200, 760)
 
         self.use_ctk = ctk is not None
