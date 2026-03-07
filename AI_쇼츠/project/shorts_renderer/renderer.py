@@ -1,7 +1,8 @@
-﻿import json
+import json
 import os
 import shutil
 import tempfile
+import unicodedata
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -38,7 +39,22 @@ def normalize_subtitle_text(s: str) -> str:
     # Handle timeline entries that saved escaped newline text.
     text = text.replace("\\n", "\n")
     text = text.replace("\ufeff", "").replace("\x00", "")
-    return text
+
+    sanitized_chars: List[str] = []
+    for ch in text:
+        if ch == "\n":
+            sanitized_chars.append(ch)
+            continue
+
+        # drawtext may render unsupported control chars as "□".
+        # Remove hidden/control characters so rendered output matches preview.
+        if unicodedata.category(ch).startswith("C"):
+            continue
+        sanitized_chars.append(ch)
+
+    normalized = "".join(sanitized_chars)
+    normalized = "\n".join(line.rstrip() for line in normalized.split("\n"))
+    return normalized.strip()
 
 
 def ffmpeg_escape_path_for_filter(p: Path) -> str:
