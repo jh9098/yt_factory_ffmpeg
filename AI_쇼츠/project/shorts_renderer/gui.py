@@ -594,12 +594,27 @@ class TimelineEditorGUI:
         if not self.base_var.get().strip():
             self.base_var.set(str(base.resolve()))
         stamp = datetime.now().strftime("%Y%m%d%H%M%S")
-        self.json_var.set(str(base / "data" / "shorts.json"))
-        self.images_var.set(str(base / "assets" / "images" / "shorts"))
-        self.tts_var.set(str(base / "assets" / "tts" / "shorts"))
-        self.timeline_var.set(self.timeline_var.get().strip() or str(base / "data" / "timeline.json"))
-        self.output_var.set(str(base / "output" / f"{stamp}.mp4"))
+        self.json_var.set(self.json_var.get().strip() or str(self._default_json_dir(base)))
+        self.images_var.set(str(self._default_images_dir(base)))
+        self.tts_var.set(str(self._default_tts_dir(base)))
+        self.timeline_var.set(str(self._default_timeline_path(base)))
+        self.output_var.set(str(self._default_output_path(base, stamp)))
         self.font_var.set(self.font_var.get().strip() or str(base / "assets" / "fonts" / "KoddiUDOnGothic-ExtraBold.ttf"))
+
+    def _default_json_dir(self, base: Path) -> Path:
+        return base / "data"
+
+    def _default_images_dir(self, base: Path) -> Path:
+        return base / "assets" / "images" / "shorts"
+
+    def _default_tts_dir(self, base: Path) -> Path:
+        return base / "assets" / "tts" / "shorts"
+
+    def _default_timeline_path(self, base: Path) -> Path:
+        return base / "data" / "timeline.json"
+
+    def _default_output_path(self, base: Path, stamp: str) -> Path:
+        return base / "output" / f"{stamp}.mp4"
 
     def _pick_base(self):
         d = filedialog.askdirectory(initialdir=self.base_var.get().strip() or os.getcwd())
@@ -608,18 +623,21 @@ class TimelineEditorGUI:
             self._refresh_defaults_from_base()
 
     def _pick_json(self):
-        initialdir = Path(self.json_var.get().strip() or self.base_var.get().strip() or os.getcwd()).parent
+        base = Path(self.base_var.get().strip() or os.getcwd())
+        initialdir = self._default_json_dir(base)
         p = filedialog.askopenfilename(initialdir=str(initialdir), filetypes=[("JSON", "*.json")])
         if p:
             self.json_var.set(p)
 
     def _pick_images(self):
-        d = filedialog.askdirectory(initialdir=self.images_var.get().strip() or os.getcwd())
+        base = Path(self.base_var.get().strip() or os.getcwd())
+        d = filedialog.askdirectory(initialdir=str(self._default_images_dir(base)))
         if d:
             self.images_var.set(d)
 
     def _pick_tts(self):
-        d = filedialog.askdirectory(initialdir=self.tts_var.get().strip() or os.getcwd())
+        base = Path(self.base_var.get().strip() or os.getcwd())
+        d = filedialog.askdirectory(initialdir=str(self._default_tts_dir(base)))
         if d:
             self.tts_var.set(d)
 
