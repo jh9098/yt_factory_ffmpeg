@@ -12,6 +12,7 @@ from .constants import (
     DEFAULT_WIDTH,
     SUPPORTED_AUD_EXTS,
     SUPPORTED_IMG_EXTS,
+    SUPPORTED_VIDEO_EXTS,
 )
 from .edge_tts import EdgeTTSConfig, synthesize_text_to_file
 from .ffmpeg_tools import concat_wavs, cut_wav_segment, ffprobe_duration_sec, normalize_audio_to_wav
@@ -153,6 +154,18 @@ def find_tts_for_scene(tts_selected_dir: Path, images_dir: Path, scene_id: str, 
     return None
 
 
+def find_media_for_scene(images_dir: Path, scene_id: str, idx: int) -> Tuple[Optional[Path], str]:
+    image_path = find_by_scene_id(images_dir, scene_id, SUPPORTED_IMG_EXTS, idx)
+    if image_path:
+        return image_path, "image"
+
+    video_path = find_by_scene_id(images_dir, scene_id, SUPPORTED_VIDEO_EXTS, idx)
+    if video_path:
+        return video_path, "video"
+
+    return None, ""
+
+
 def _scene_tts_text(scene: Dict[str, Any]) -> str:
     candidates = [scene.get("tts_text"), scene.get("voice_text"), scene.get("narration_text")]
     for text in candidates:
@@ -243,11 +256,11 @@ def build_master_audio_and_timeline(
 
     for i, scene in enumerate(scenes, start=1):
         scene_id = str(scene.get("scene_id", i))
-        img = find_by_scene_id(images_dir, scene_id, SUPPORTED_IMG_EXTS, i)
+        media_path, media_type = find_media_for_scene(images_dir, scene_id, i)
         aud = find_tts_for_scene(tts_dir, images_dir, scene_id, i)
 
-        if not img:
-            raise FileNotFoundError(f"Missing image: scene_id={scene_id}")
+        if not media_path:
+            raise FileNotFoundError(f"Missing media(image/video): scene_id={scene_id}")
 
         norm_wav = wav_dir / f"{i:03d}_{scene_id}.wav"
 
@@ -290,20 +303,24 @@ def build_master_audio_and_timeline(
         )
         norm_wavs.append(norm_wav)
 
-        motion = normalize_motion_name(
-            str(scene.get("camera_motion", {}).get("motion_type", "hold"))
-            if isinstance(scene.get("camera_motion"), dict)
-            else str(scene.get("camera_motion", "hold"))
-        )
+        motion = "hold"
+        motion_strength = 0.0
+        if media_type == "image":
+            motion = normalize_motion_name(
+                str(scene.get("camera_motion", {}).get("motion_type", "hold"))
+                if isinstance(scene.get("camera_motion"), dict)
+                else str(scene.get("camera_motion", "hold"))
+            )
+            motion_strength = 0.06
 
         image_item = {
             "id": f"img_{i}",
             "scene_id": scene_id,
-            "path": str(img),
+            "path": str(media_path),
             "start_sec": round(start, 3),
             "end_sec": round(end, 3),
             "motion": motion,
-            "motion_strength": 0.06,
+            "motion_strength": motion_strength,
             "fade_in_sec": DEFAULT_FADE_SEC,
             "fade_out_sec": DEFAULT_FADE_SEC,
             "layer": 1,
@@ -322,7 +339,7 @@ def build_master_audio_and_timeline(
             {
                 **image_item,
                 "id": f"media_{i}",
-                "type": "image",
+                "type": media_type,
                 "clip_in_sec": 0.0,
                 "clip_out_sec": round(end - start, 3),
                 "track": "video",
