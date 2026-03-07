@@ -85,10 +85,12 @@ def load_json_schema_compliant(json_path: Path) -> Dict[str, Any]:
         "title",
         "target_audience",
         "tone",
-        "safety_notes",
-        "cta",
         "estimated_total_duration_sec",
     ]
+    meta_optional_with_defaults = {
+        "safety_notes": "",
+        "cta": "",
+    }
 
     meta_obj = data.get("meta")
     if isinstance(meta_obj, dict):
@@ -98,11 +100,15 @@ def load_json_schema_compliant(json_path: Path) -> Dict[str, Any]:
         normalized = dict(data)
         for k in meta_required:
             normalized[k] = meta_obj[k]
+        for k, default_value in meta_optional_with_defaults.items():
+            normalized[k] = meta_obj.get(k, default_value)
         data = normalized
     else:
         miss = [k for k in meta_required if k not in data]
         if miss:
             raise ValueError(f"Missing root fields: {miss}")
+        for k, default_value in meta_optional_with_defaults.items():
+            data.setdefault(k, default_value)
 
     for i, sc in enumerate(data["scenes"], start=1):
         if not isinstance(sc, dict):
