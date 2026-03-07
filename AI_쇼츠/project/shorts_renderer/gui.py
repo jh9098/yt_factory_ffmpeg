@@ -4,6 +4,7 @@ import json
 import os
 import queue
 import threading
+import time
 import traceback
 import wave
 from datetime import datetime
@@ -127,6 +128,10 @@ class TimelineEditorGUI:
         self.vlc_instance = None
         self.vlc_player = None
         self.vlc_current_path: Optional[str] = None
+        self.preview_playing = False
+        self.preview_last_tick = time.monotonic()
+        self.active_preview_media_id: Optional[str] = None
+        self.selected_subtitle_id: Optional[str] = None
         self.video_previewer = VideoFramePreviewer()
 
         self._build_ui()
@@ -508,7 +513,13 @@ class TimelineEditorGUI:
         sub_box.grid(row=1, column=0, sticky="nsew", pady=(0, 6))
         self._label(sub_box, "오버레이/자막 트랙").pack(anchor="w")
 
-        self.subtitle_list = tk.Listbox(sub_box, bg=COLORS["list_bg"], fg=COLORS["list_fg"], selectbackground=COLORS["list_select"])
+        self.subtitle_list = tk.Listbox(
+            sub_box,
+            bg=COLORS["list_bg"],
+            fg=COLORS["list_fg"],
+            selectbackground=COLORS["list_select"],
+            exportselection=False,
+        )
         self.subtitle_list.pack(fill="both", expand=True, pady=4)
         self.subtitle_list.bind("<<ListboxSelect>>", self._on_subtitle_select)
 
@@ -583,6 +594,11 @@ class TimelineEditorGUI:
                 self._log(str(payload))
             elif kind == "done":
                 self._set_running(False)
+                if payload.get("autoload_timeline"):
+                    try:
+                        self._load_timeline_from_file()
+                    except Exception as e:
+                        self._log(f"[WARN] timeline auto load failed: {e}")
                 messagebox.showinfo(payload.get("title", "Done"), payload.get("message", "") + "\n\n다음 단계 버튼으로 이어서 진행하세요.")
             elif kind == "error":
                 self._set_running(False)
@@ -751,7 +767,7 @@ class TimelineEditorGUI:
                         voice=self.edge_voice_var.get().strip() or "ko-KR-SunHiNeural",
                     ),
                 )
-                self.ui_queue.put(("done", {"title": "Done", "message": f"Timeline built\n{tl}"}))
+                self.ui_queue.put(("done", {"title": "Done", "message": f"Timeline built\n{tl}", "autoload_timeline": True}))
             except Exception as e:
                 logger(str(e))
                 logger(traceback.format_exc())
@@ -1028,16 +1044,23 @@ class TimelineEditorGUI:
         self._refresh_preview()
 
     def _refresh_sub_list(self):
+        selected_id = self.selected_subtitle_id
         self.subtitle_list.delete(0, "end")
-        for s in self._get_subs():
+        selected_idx = None
+        for idx, s in enumerate(self._get_subs()):
             txt = str(s.get("text", "")).replace("\n", " ")
             self.subtitle_list.insert("end", f"{s.get('id','')} | {safe_float(s.get('start_sec',0),0):.2f}-{safe_float(s.get('end_sec',0),0):.2f} | {txt[:36]}")
+            if str(s.get("id", "")) == str(selected_id):
+                selected_idx = idx
+        if selected_idx is not None:
+            self.subtitle_list.selection_set(selected_idx)
 
     def _on_subtitle_select(self, _evt=None):
         sel = self.subtitle_list.curselection()
         if not sel:
             return
         sub = self._get_subs()[sel[0]]
+        self.selected_subtitle_id = str(sub.get("id", ""))
         self.subtitle_text.delete("1.0", "end")
         self.subtitle_text.insert("1.0", str(sub.get("text", "")))
         self.sub_start_var.set(f"{safe_float(sub.get('start_sec', 0), 0):.3f}")
@@ -1070,16 +1093,22 @@ class TimelineEditorGUI:
             "layer": 2,
             "track": "overlay",
         })
+        self.selected_subtitle_id = str(subs[-1].get("id", ""))
         self._refresh_sub_list()
         self._normalize_total()
         self._draw_timeline()
 
     def _apply_subtitle_form(self):
+        subs = self._get_subs()
+        sub = None
         sel = self.subtitle_list.curselection()
-        if not sel:
+        if sel:
+            sub = subs[sel[0]]
+        elif self.selected_subtitle_id:
+            sub = next((item for item in subs if str(item.get("id", "")) == self.selected_subtitle_id), None)
+        if not sub:
             return
         self._snapshot()
-        sub = self._get_subs()[sel[0]]
         sub["text"] = self.subtitle_text.get("1.0", "end").rstrip()
         sub["start_sec"] = max(0.0, safe_float(self.sub_start_var.get(), 0.0))
         sub["end_sec"] = max(sub["start_sec"] + 0.05, safe_float(self.sub_end_var.get(), sub["start_sec"] + 1.0))
@@ -1096,6 +1125,7 @@ class TimelineEditorGUI:
             return
         self._snapshot()
         self._get_subs().pop(sel[0])
+        self.selected_subtitle_id = None
         self._refresh_sub_list()
         self._normalize_total()
         self._draw_timeline()
@@ -1194,12 +1224,18 @@ class TimelineEditorGUI:
             pass
 
     def _play_preview(self):
+        self.preview_playing = True
+        self.preview_last_tick = time.monotonic()
         t = safe_float(self.playhead_var.get(), 0.0)
         active = self._find_active_clip(t)
         if active and self._is_video(active) and self.vlc_player:
+            self.active_preview_media_id = str(active.get("id", ""))
             self._show_vlc(active, t, autoplay=True)
+        else:
+            self.active_preview_media_id = None
 
     def _pause_preview(self):
+        self.preview_playing = False
         if self.vlc_player:
             try:
                 self.vlc_player.pause()
@@ -1214,6 +1250,7 @@ class TimelineEditorGUI:
             media = self.vlc_instance.media_new(path)
             self.vlc_player.set_media(media)
             self.vlc_current_path = path
+        self._attach_vlc()
         self.vlc_panel.lift()
         local = max(0.0, timeline_t - safe_float(clip.get("start_sec", 0), 0))
         target_ms = int((safe_float(clip.get("clip_in_sec", 0), 0) + local) * 1000)
@@ -1235,17 +1272,30 @@ class TimelineEditorGUI:
         self._draw_timeline()
 
     def _poll_preview(self):
-        if self.vlc_player and self.vlc_player.is_playing():
-            t = safe_float(self.playhead_var.get(), 0.0)
-            clip = self._find_active_clip(t)
-            if clip and self._is_video(clip):
-                cur = self.vlc_player.get_time() / 1000.0
-                in_t = safe_float(clip.get("clip_in_sec", 0), 0)
-                timeline_t = safe_float(clip.get("start_sec", 0), 0) + max(0.0, cur - in_t)
-                if timeline_t <= safe_float(clip.get("end_sec", 0), 0) + 0.05:
-                    self.playhead_var.set(timeline_t)
-                else:
+        if self.preview_playing:
+            now = time.monotonic()
+            dt = max(0.0, now - self.preview_last_tick)
+            self.preview_last_tick = now
+
+            current_t = safe_float(self.playhead_var.get(), 0.0)
+            total_t = safe_float(self.timeline_data.get("meta", {}).get("duration_sec", 0.0), 0.0) if self.timeline_data else 0.0
+            next_t = current_t + dt
+            if total_t > 0 and next_t >= total_t:
+                next_t = total_t
+                self.preview_playing = False
+            self.playhead_var.set(next_t)
+
+            active = self._find_active_clip(next_t)
+            if active and self._is_video(active) and self.vlc_player:
+                media_id = str(active.get("id", ""))
+                if self.active_preview_media_id != media_id or not self.vlc_player.is_playing():
+                    self.active_preview_media_id = media_id
+                    self._show_vlc(active, next_t, autoplay=self.preview_playing)
+            else:
+                self.active_preview_media_id = None
+                if self.vlc_player and self.vlc_player.is_playing():
                     self.vlc_player.pause()
+
         self._draw_timeline()
         self.root.after(120, self._poll_preview)
 
