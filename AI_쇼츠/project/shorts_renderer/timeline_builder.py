@@ -9,7 +9,6 @@ from .constants import (
     DEFAULT_FONT_SIZE,
     DEFAULT_HEIGHT,
     DEFAULT_OVERLAY_FONT_SIZE,
-    DEFAULT_SCALE_MODE,
     DEFAULT_WIDTH,
     SUPPORTED_AUD_EXTS,
     SUPPORTED_IMG_EXTS,
@@ -17,6 +16,8 @@ from .constants import (
 from .edge_tts import EdgeTTSConfig, synthesize_text_to_file
 from .ffmpeg_tools import concat_wavs, cut_wav_segment, ffprobe_duration_sec, normalize_audio_to_wav
 from .utils import ensure_dir, log_print, normalize_motion_name, safe_float, sanitize_folder_name
+
+DEFAULT_SCALE_MODE_FALLBACK = "contain"
 
 
 def scene_id_candidates(scene_id: str, idx: int) -> List[str]:
@@ -308,7 +309,7 @@ def build_master_audio_and_timeline(
             "layer": 1,
             "x": 0,
             "y": 0,
-            "scale_mode": DEFAULT_SCALE_MODE,
+            "scale_mode": DEFAULT_SCALE_MODE_FALLBACK,
             "crop_x": 0.0,
             "crop_y": 0.0,
             "crop_w": 1.0,
