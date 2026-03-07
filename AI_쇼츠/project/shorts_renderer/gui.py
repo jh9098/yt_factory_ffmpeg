@@ -33,7 +33,17 @@ try:
 except ImportError:
     raise SystemExit("Pillow is required. Install with: pip install pillow")
 
-from .constants import DEFAULT_BG_COLOR, DEFAULT_FADE_SEC, DEFAULT_FONT_SIZE, DEFAULT_FPS, DEFAULT_PREVIEW_H, DEFAULT_PREVIEW_W, DEFAULT_SCALE_MODE, DEFAULT_WIDTH, DEFAULT_HEIGHT
+from . import constants as _constants
+
+DEFAULT_BG_COLOR = getattr(_constants, "DEFAULT_BG_COLOR", "black")
+DEFAULT_FADE_SEC = getattr(_constants, "DEFAULT_FADE_SEC", 0.25)
+DEFAULT_FONT_SIZE = getattr(_constants, "DEFAULT_FONT_SIZE", 54)
+DEFAULT_FPS = getattr(_constants, "DEFAULT_FPS", 30)
+DEFAULT_PREVIEW_H = getattr(_constants, "DEFAULT_PREVIEW_H", 480)
+DEFAULT_PREVIEW_W = getattr(_constants, "DEFAULT_PREVIEW_W", 270)
+DEFAULT_SCALE_MODE = getattr(_constants, "DEFAULT_SCALE_MODE", "contain")
+DEFAULT_WIDTH = getattr(_constants, "DEFAULT_WIDTH", 1080)
+DEFAULT_HEIGHT = getattr(_constants, "DEFAULT_HEIGHT", 1920)
 from .media_transform import normalized_crop
 from .scale_mode import normalize_scale_mode, parse_scale_mode_input, to_scale_mode_display
 from .edge_tts import EdgeTTSConfig

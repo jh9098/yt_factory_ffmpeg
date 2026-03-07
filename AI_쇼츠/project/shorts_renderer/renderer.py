@@ -5,7 +5,15 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from .constants import DEFAULT_BG_COLOR, DEFAULT_FADE_SEC, DEFAULT_FONT_SIZE, DEFAULT_FPS, DEFAULT_HEIGHT, DEFAULT_SCALE_MODE, DEFAULT_WIDTH
+from . import constants as _constants
+
+DEFAULT_BG_COLOR = getattr(_constants, "DEFAULT_BG_COLOR", "black")
+DEFAULT_FADE_SEC = getattr(_constants, "DEFAULT_FADE_SEC", 0.25)
+DEFAULT_FONT_SIZE = getattr(_constants, "DEFAULT_FONT_SIZE", 54)
+DEFAULT_FPS = getattr(_constants, "DEFAULT_FPS", 30)
+DEFAULT_HEIGHT = getattr(_constants, "DEFAULT_HEIGHT", 1920)
+DEFAULT_SCALE_MODE = getattr(_constants, "DEFAULT_SCALE_MODE", "contain")
+DEFAULT_WIDTH = getattr(_constants, "DEFAULT_WIDTH", 1080)
 from .ffmpeg_tools import ffprobe_duration_sec, run_cmd, which_ffmpeg
 from .media_transform import normalized_crop
 from .scale_mode import normalize_scale_mode

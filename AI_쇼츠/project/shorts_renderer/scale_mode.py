@@ -1,4 +1,7 @@
-from .constants import DEFAULT_SCALE_MODE, SCALE_MODE_OPTIONS
+from . import constants as _constants
+
+DEFAULT_SCALE_MODE = getattr(_constants, "DEFAULT_SCALE_MODE", "contain")
+SCALE_MODE_OPTIONS = getattr(_constants, "SCALE_MODE_OPTIONS", ["contain", "cover"])
 
 
 SCALE_MODE_DISPLAY_LABELS = {
