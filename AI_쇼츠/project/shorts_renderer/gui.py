@@ -42,6 +42,7 @@ from .timeline_builder import build_timeline_service
 from .ui_theme import BUTTON_KIND, COLORS, TTK_BUTTON_STYLE
 from .ui_tooltip import ToolTip
 from .utils import ensure_dir, safe_float, safe_int
+from .video_preview import VideoFramePreviewer
 
 
 class TkTextLogger:
@@ -116,6 +117,7 @@ class TimelineEditorGUI:
         self.vlc_instance = None
         self.vlc_player = None
         self.vlc_current_path: Optional[str] = None
+        self.video_previewer = VideoFramePreviewer()
 
         self._build_ui()
         self._refresh_defaults_from_base()
@@ -1255,9 +1257,8 @@ class TimelineEditorGUI:
             return int(DEFAULT_PREVIEW_W * 0.94 - text_w) + x_offset
         return int((DEFAULT_PREVIEW_W - text_w) / 2) + x_offset
 
-    def _compose_preview_image(self, clip: Dict[str, Any]) -> Image.Image:
+    def _compose_preview_image_from_image(self, clip: Dict[str, Any], img: Image.Image) -> Image.Image:
         canvas_img = Image.new("RGB", (DEFAULT_PREVIEW_W, DEFAULT_PREVIEW_H), "black")
-        img = Image.open(str(clip.get("path", ""))).convert("RGB")
 
         cx, cy, cw, ch = normalized_crop(clip)
         crop_left = int(round(img.width * cx))
@@ -1294,6 +1295,19 @@ class TimelineEditorGUI:
 
         return canvas_img
 
+    def _compose_preview_image(self, clip: Dict[str, Any]) -> Image.Image:
+        img = Image.open(str(clip.get("path", ""))).convert("RGB")
+        return self._compose_preview_image_from_image(clip, img)
+
+    def _compose_preview_video_image(self, clip: Dict[str, Any], timeline_t: float) -> Optional[Image.Image]:
+        video_path = Path(str(clip.get("path", "")))
+        local = max(0.0, timeline_t - safe_float(clip.get("start_sec", 0), 0))
+        frame_t = safe_float(clip.get("clip_in_sec", 0), 0) + local
+        frame = self.video_previewer.extract_frame(video_path=video_path, time_sec=frame_t)
+        if frame is None:
+            return None
+        return self._compose_preview_image_from_image(clip, frame)
+
     def _refresh_preview(self):
         self.preview_canvas.delete("all")
         if not self.timeline_data:
@@ -1314,9 +1328,14 @@ class TimelineEditorGUI:
         bg = self.bg_var.get().strip().lower()
         self.preview_canvas.configure(bg=bg if bg in {"black", "white", "gray"} else "black")
 
-        if clip and Path(str(clip.get("path", ""))).exists() and not self._is_video(clip):
+        if clip and Path(str(clip.get("path", ""))).exists():
             try:
-                canvas_img = self._compose_preview_image(clip)
+                if self._is_video(clip):
+                    canvas_img = self._compose_preview_video_image(clip, t)
+                    if canvas_img is None:
+                        raise RuntimeError("video_frame_extract_failed")
+                else:
+                    canvas_img = self._compose_preview_image(clip)
                 draw = ImageDraw.Draw(canvas_img)
                 font_path = self.font_var.get().strip()
                 try:
@@ -1339,8 +1358,6 @@ class TimelineEditorGUI:
                 self.preview_canvas.create_image(DEFAULT_PREVIEW_W // 2, DEFAULT_PREVIEW_H // 2, image=self.preview_img_tk)
             except Exception:
                 self.preview_canvas.create_text(DEFAULT_PREVIEW_W // 2, DEFAULT_PREVIEW_H // 2, fill="white", text="Preview failed")
-        elif clip and self._is_video(clip):
-            self.preview_canvas.create_text(DEFAULT_PREVIEW_W // 2, DEFAULT_PREVIEW_H // 2, fill="white", text="Install python-vlc for video preview")
         else:
             self.preview_canvas.create_text(DEFAULT_PREVIEW_W // 2, DEFAULT_PREVIEW_H // 2, fill="white", text="No active clip")
 
