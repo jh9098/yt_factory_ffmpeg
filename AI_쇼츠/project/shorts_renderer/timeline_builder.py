@@ -1,4 +1,5 @@
-﻿import json
+import json
+import unicodedata
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -19,6 +20,23 @@ from .ffmpeg_tools import concat_wavs, cut_wav_segment, ffprobe_duration_sec, no
 from .utils import ensure_dir, log_print, normalize_motion_name, safe_float, sanitize_folder_name
 
 DEFAULT_SCALE_MODE_FALLBACK = "contain"
+
+
+def _sanitize_subtitle_line(value: Any) -> str:
+    text = str(value or "")
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    text = text.replace("\u2028", "\n").replace("\u2029", "\n")
+
+    sanitized_chars: List[str] = []
+    for ch in text:
+        if ch == "\n":
+            sanitized_chars.append(ch)
+            continue
+        if unicodedata.category(ch).startswith("C"):
+            continue
+        sanitized_chars.append(ch)
+
+    return "".join(sanitized_chars).strip()
 
 
 def scene_id_candidates(scene_id: str, idx: int) -> List[str]:
@@ -349,7 +367,12 @@ def build_master_audio_and_timeline(
         overlay_text = scene.get("overlay_text") or ""
         overlay_pos = scene.get("overlay_position") or "top"
         subtitle_lines = scene.get("subtitle_lines") or []
-        subtitle_text = "\n".join([str(x) for x in subtitle_lines if str(x).strip()]).strip()
+        normalized_subtitle_lines: List[str] = []
+        for line in subtitle_lines:
+            cleaned = _sanitize_subtitle_line(line)
+            if cleaned:
+                normalized_subtitle_lines.extend([segment.strip() for segment in cleaned.split("\n") if segment.strip()])
+        subtitle_text = "\n".join(normalized_subtitle_lines).strip()
 
         if overlay_text:
             subtitle_items.append(
